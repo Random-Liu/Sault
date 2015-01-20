@@ -1,22 +1,29 @@
 package com.pku.ebolt.engine;
 
+import java.io.Serializable;
+
 import com.pku.ebolt.api.Tuple;
 
-class TupleWrapper {
-	private final int hashCode;
+class TupleWrapper implements Serializable {
+	private static final long serialVersionUID = 1L;
 	private final Tuple tuple;
 	
 	TupleWrapper(Tuple tuple) {
 		this.tuple = tuple;
-		this.hashCode = tuple.getKey().hashCode(); // Cache the hash code
-	}
-	
-	Tuple getTuple() {
-		return tuple;
 	}
 	
 	@Override
 	public int hashCode() {
-		return this.hashCode;
+		// Return hashCode of key
+		return tuple.getKey().hashCode();
+	}
+	
+	@Override
+	// Override this for hash map
+	public boolean equals(Object tupleWrapper) {
+		assert(tupleWrapper instanceof TupleWrapper);
+		Object key1 = tuple.getKey();
+		Object key2 = ((TupleWrapper)tupleWrapper).tuple.getKey();
+		return key1.equals(key2);
 	}
 }

@@ -1,7 +1,6 @@
 package com.pku.ebolt.engine;
 
 import java.util.Iterator;
-import java.util.List;
 
 import com.pku.ebolt.api.IEBolt;
 import com.pku.ebolt.api.Tuple;

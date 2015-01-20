@@ -8,20 +8,29 @@ import akka.actor.UntypedActor;
 import akka.japi.Creator;
 
 class RouterMap {
-	private HashMap<Object, ActorRef> routerTable;
+	private HashMap<TupleWrapper, ActorRef> routerTable;
+	
+	RouterMap() {
+		routerTable = new HashMap<TupleWrapper, ActorRef> ();
+	}
+	
+	boolean isTargetAvailable(TupleWrapper tupleWrapper) {
+		return routerTable.get(tupleWrapper)  != null;
+	}
 	
 	ActorRef route(TupleWrapper tupleWrapper) {
 		return routerTable.get(tupleWrapper);
 	}
 	
-	void addTarget(TupleWrapper tupleWrapper, ActorRef target) {
-		assert(routerTable.containsKey(tupleWrapper));
+	void setTarget(TupleWrapper tupleWrapper, ActorRef target) {
+		routerTable.put(tupleWrapper, target);
 	}
 }
 
 class InputRouter extends UntypedActor {
 
 	private WorkerFactory workerFactory;
+	private RouterMap routerMap;
 	
 	public static Props props(final WorkerFactory workerFactory) {
 		return Props.create(new Creator<InputRouter>() {
@@ -35,12 +44,19 @@ class InputRouter extends UntypedActor {
 	InputRouter(WorkerFactory workerFactory) {
 		this.workerFactory = workerFactory;
 		this.workerFactory.setContext(getContext());
+		this.routerMap = new RouterMap();
 	}
 
 	@Override
 	public void onReceive(Object msg) throws Exception {
 		if (msg instanceof TupleWrapper) {
-			
+			TupleWrapper tupleWrapper = (TupleWrapper)msg;
+			ActorRef target = routerMap.route(tupleWrapper);
+			if (target == null) {
+				target = workerFactory.createWorker();
+				routerMap.setTarget(tupleWrapper, target);
+			}
+			target.forward(msg, getContext());
 		} else unhandled(msg);
 	}
 }
