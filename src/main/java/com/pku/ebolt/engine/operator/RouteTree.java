@@ -1,19 +1,23 @@
-package com.pku.ebolt.engine;
+package com.pku.ebolt.engine.operator;
 
+import java.io.Serializable;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.Queue;
 import java.util.TreeMap;
+import java.util.Map.Entry;
 
 import akka.actor.ActorRef;
-import akka.actor.Props;
-import akka.actor.UntypedActor;
-import akka.japi.Creator;
 
-class RouteTree {
-	private class RouteTreeNode {
+class RouteTree implements Serializable {
+	private static final long serialVersionUID = 1L;
+
+	private class RouteTreeNode implements Serializable {
+		private static final long serialVersionUID = 1L;
+		
 		int upperBound;
 		ActorRef target;
 		RouteTreeNode (int upperBound, ActorRef target) {
@@ -41,6 +45,13 @@ class RouteTree {
 			lowerBounds.offer(lowerBound);
 			lowerBounds.offer(split(lowerBound, targetIter.next()));
 		}
+	}
+	
+	Map<ActorRef, Integer> createTargetRanges() {
+		Map<ActorRef, Integer> targetRanges = new HashMap<ActorRef, Integer>();
+		for (Entry<Integer, RouteTreeNode> targetEntry : routeMap.entrySet())
+			targetRanges.put(targetEntry.getValue().target, targetEntry.getKey());
+		return targetRanges;
 	}
 	
 	ActorRef route(TupleWrapper tupleWrapper) {
@@ -160,30 +171,3 @@ class RouteTree {
 			return (lowerBound - 1) & lowerBound;
 	}
 }
-
-class OutputRouter extends UntypedActor {
-	RouteTree routerTable;
-	
-	public static Props props(final List<ActorRef> targetRouters) {
-		return Props.create(new Creator<OutputRouter>() {
-			private static final long serialVersionUID = 1L;
-			public OutputRouter create() throws Exception {
-				return new OutputRouter(targetRouters);
-			}
-		});
-	}
-	
-	OutputRouter(List<ActorRef> targetRouters) {
-		routerTable = new RouteTree(targetRouters);
-	}
-	
-	@Override
-	public void onReceive(Object msg) throws Exception {
-		if (msg instanceof TupleWrapper) {
-			TupleWrapper tupleWrapper = (TupleWrapper)msg;
-			ActorRef target = routerTable.route(tupleWrapper);
-			target.forward(msg, getContext());
-		} else unhandled(msg);
-	}
-}
-

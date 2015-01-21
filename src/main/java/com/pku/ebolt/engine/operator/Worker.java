@@ -1,20 +1,20 @@
-package com.pku.ebolt.engine;
+package com.pku.ebolt.engine.operator;
 
 import java.util.Iterator;
 
-import com.pku.ebolt.api.IEBolt;
+import com.pku.ebolt.api.EBolt;
 import com.pku.ebolt.api.Tuple;
 
 import akka.actor.*;
 import akka.japi.Creator;
 
 class WorkerFactory {
-	private IEBolt ebolt;
+	private EBolt ebolt;
 	private ActorRef outputRouter;
 	private ActorContext context;
 	
 	// Add configuration later
-	WorkerFactory(IEBolt appBolt, ActorRef outputRouter) {
+	WorkerFactory(EBolt appBolt, ActorRef outputRouter) {
 		this.ebolt = appBolt;
 		this.outputRouter = outputRouter;
 	}
@@ -31,10 +31,10 @@ class WorkerFactory {
 
 class Worker extends UntypedActor {
 	private Collector collector;
-	private IEBolt ebolt;
+	private EBolt ebolt;
 	private ActorRef outputRouter;
 	
-	public static Props props(final IEBolt appBolt, final ActorRef outputRouter) {
+	public static Props props(final EBolt appBolt, final ActorRef outputRouter) {
 		return Props.create(new Creator<Worker>() {
 			private static final long serialVersionUID = 1L;
 			public Worker create() throws Exception {
@@ -44,7 +44,7 @@ class Worker extends UntypedActor {
 	}
 	
 	// TODO Add configuration later
-	Worker(IEBolt appBolt, ActorRef outputRouter) {
+	Worker(EBolt appBolt, ActorRef outputRouter) {
 		this.outputRouter = outputRouter;
 		
 		collector = new Collector();

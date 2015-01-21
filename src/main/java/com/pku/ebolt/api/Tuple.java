@@ -2,8 +2,10 @@ package com.pku.ebolt.api;
 
 import java.io.Serializable;
 
-/*
- * All use Object current now
+/**
+ * Base Tuple class. All use Object current now.
+ * @author taotaotheripper
+ *
  */
 public class Tuple implements Serializable {
 	private static final long serialVersionUID = 1L;
