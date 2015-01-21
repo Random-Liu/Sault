@@ -1,4 +1,4 @@
-package com.pku.ebolt.engine.resource;
+package com.pku.ebolt.engine.cluster;
 
 import java.io.Serializable;
 import java.util.List;
@@ -11,6 +11,7 @@ import akka.actor.UntypedActor;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 
+// TODO Consider class loading problem in the cluster!
 public class ResourceManager extends UntypedActor {
 
 	static private long FUTRUE_TIMEOUT = 120L; // 120 seconds

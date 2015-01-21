@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.pku.ebolt.api.EBolt;
-import com.pku.ebolt.engine.resource.ResourceManager;
+import com.pku.ebolt.engine.cluster.ResourceManager;
 
 import akka.actor.ActorRef;
 import akka.actor.Address;
