@@ -8,22 +8,22 @@ import akka.actor.UntypedActor;
 import akka.japi.Creator;
 
 class RouterMap {
-	private HashMap<TupleWrapper, ActorRef> routerTable;
+	private HashMap<Object, ActorRef> routerTable;
 	
 	RouterMap() {
-		routerTable = new HashMap<TupleWrapper, ActorRef> ();
+		routerTable = new HashMap<Object, ActorRef> ();
 	}
 	
 	boolean isTargetAvailable(TupleWrapper tupleWrapper) {
-		return routerTable.get(tupleWrapper)  != null;
+		return routerTable.get(tupleWrapper.getKey())  != null;
 	}
 	
 	ActorRef route(TupleWrapper tupleWrapper) {
-		return routerTable.get(tupleWrapper);
+		return routerTable.get(tupleWrapper.getKey());
 	}
 	
 	void setTarget(TupleWrapper tupleWrapper, ActorRef target) {
-		routerTable.put(tupleWrapper, target);
+		routerTable.put(tupleWrapper.getKey(), target);
 	}
 }
 

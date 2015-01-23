@@ -1,7 +1,5 @@
 package com.pku.ebolt.engine.operator;
 
-import java.util.Iterator;
-
 import com.pku.ebolt.api.EBolt;
 import com.pku.ebolt.api.Tuple;
 
@@ -32,7 +30,6 @@ class WorkerFactory {
 class Worker extends UntypedActor {
 	private Collector collector;
 	private EBolt ebolt;
-	private ActorRef outputRouter;
 	
 	public static Props props(final EBolt appBolt, final ActorRef outputRouter) {
 		return Props.create(new Creator<Worker>() {
@@ -45,9 +42,7 @@ class Worker extends UntypedActor {
 	
 	// TODO Add configuration later
 	Worker(EBolt appBolt, ActorRef outputRouter) {
-		this.outputRouter = outputRouter;
-		
-		collector = new Collector();
+		collector = new Collector(outputRouter, getSelf());
 		ebolt = appBolt;
 		ebolt.prepare(collector);
 	}
@@ -56,15 +51,14 @@ class Worker extends UntypedActor {
 	public void onReceive(Object msg) throws Exception {
 		if (msg instanceof Tuple) {
 			ebolt.execute((Tuple)msg);
-			Iterator<Tuple> tupleIter = collector.getBufferIterator();
-			while (tupleIter.hasNext()) {
-				outputRouter.tell(tupleIter.next(), getSelf());
-			}
+			// TODO Flush every execution current now, can be optimized later. 
+			collector.flush();
 		} else unhandled(msg);
 	}
 	
 	@Override
 	public void postStop() {
 		ebolt.cleanup();
+		collector.flush(); // In case that application emit some message in cleanup stage.
 	}
 }

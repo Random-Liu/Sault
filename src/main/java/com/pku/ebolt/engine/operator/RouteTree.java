@@ -55,7 +55,7 @@ class RouteTree implements Serializable {
 	}
 	
 	ActorRef route(TupleWrapper tupleWrapper) {
-		int key = tupleWrapper.hashCode();
+		int key = tupleWrapper.getKey().hashCode();
 		assert(key >= 0);
 		
 		Entry<Integer, RouteTreeNode> targetTableItem = routeMap.floorEntry(key);

@@ -3,12 +3,18 @@ package com.pku.ebolt.engine.operator;
 import java.util.Iterator;
 import java.util.LinkedList;
 
+import akka.actor.ActorRef;
+
 import com.pku.ebolt.api.Tuple;
 
 class Collector implements com.pku.ebolt.api.Collector {
-	LinkedList<Tuple> emitBuffer;
-
-	Collector() {
+	private LinkedList<Tuple> emitBuffer;
+	private ActorRef outputRouter;
+	private ActorRef worker;
+	
+	Collector(ActorRef outputRouter, ActorRef worker) {
+		this.outputRouter = outputRouter;
+		this.worker = worker;
 		emitBuffer = new LinkedList<Tuple>();
 	}
 	
@@ -16,11 +22,11 @@ class Collector implements com.pku.ebolt.api.Collector {
 		emitBuffer.add(tuple);
 	}
 	
-	Iterator<Tuple> getBufferIterator() {
-		return emitBuffer.iterator();
-	}
-	
-	void cleanBuffer() {
+	// TODO Can be optimized later, such as aggregation etc.
+	final public void flush() {
+		Iterator<Tuple> tupleIter = emitBuffer.iterator();
+		while (tupleIter.hasNext())
+			outputRouter.tell(tupleIter.next(), worker);
 		emitBuffer.clear();
 	}
 }

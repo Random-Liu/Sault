@@ -12,18 +12,7 @@ class TupleWrapper implements Serializable {
 		this.tuple = tuple;
 	}
 	
-	@Override
-	public int hashCode() {
-		// Return hashCode of key
-		return tuple.getKey().hashCode();
-	}
-	
-	@Override
-	// Override this for hash map
-	public boolean equals(Object tupleWrapper) {
-		assert(tupleWrapper instanceof TupleWrapper);
-		Object key1 = tuple.getKey();
-		Object key2 = ((TupleWrapper)tupleWrapper).tuple.getKey();
-		return key1.equals(key2);
+	Object getKey() {
+		return tuple.getKey();
 	}
 }
