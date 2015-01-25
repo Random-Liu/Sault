@@ -10,9 +10,9 @@ import java.util.Map.Entry;
 import com.pku.ebolt.api.EBolt;
 import com.pku.ebolt.engine.cluster.ResourceManager;
 
+import akka.actor.ActorContext;
 import akka.actor.ActorRef;
 import akka.actor.Address;
-import akka.actor.AddressFromURIString;
 import akka.actor.Deploy;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
@@ -55,8 +55,9 @@ public class Operator extends UntypedActor {
         }
     }
     
+    // TODO Change to class later!
     private EBolt appBolt;
-    private String id;
+    private final String id;
 	private Map<String, ActorRef> targets;
 	private Map<String, RouteTree> targetRouters;
 	private Map<String, ActorRef> sources;
@@ -64,12 +65,15 @@ public class Operator extends UntypedActor {
 	private RouteTree router;
 	private Map<ActorRef, Integer> subOperatorRanges;
 	
-	public static Props props(final String id, final EBolt appBolt, final ActorRef resourceManager) {
+	private final ResourceManager resourceMananger;
+	private List<Address> resources;
+	
+	public static Props props(final String id, final EBolt appBolt, final ResourceManager resourceManager) {
 		// Pass empty targets in constructor
 		return props(id, appBolt, resourceManager, new HashMap<String, ActorRef>());
 	}
 	
-	public static Props props(final String id, final EBolt appBolt, final ActorRef resourceManager,
+	public static Props props(final String id, final EBolt appBolt, final ResourceManager resourceManager,
 			final Map<String, ActorRef> targets) {
 		return Props.create(new Creator<Operator>() {
 			private static final long serialVersionUID = 1L;
@@ -86,8 +90,8 @@ public class Operator extends UntypedActor {
 	 * @param operator
 	 * @param self
 	 */
-	public static void addTarget(String targetID, ActorRef target, ActorRef operator, ActorRef self) {
-		operator.tell(new Target(targetID, target), self);
+	public static void addTarget(String targetID, ActorRef target, ActorRef operator, ActorContext context) {
+		operator.tell(new Target(targetID, target), context.self());
 	}
 	
 	/**
@@ -98,36 +102,27 @@ public class Operator extends UntypedActor {
 	 * @param operator
 	 * @param self
 	 */
-	public static void removeTarget(String targetID, ActorRef operator, ActorRef self) {
+	public static void removeTarget(String targetID, ActorRef operator, ActorContext context) {
 		// Pass null to remove the target
-		operator.tell(new Target(targetID, null), self);
+		operator.tell(new Target(targetID, null), context.self());
 	}
 	
-	Operator(String id, EBolt appBolt, ActorRef resourceManager, Map<String, ActorRef> targets) {
+	Operator(String id, EBolt appBolt, ResourceManager resourceManager, Map<String, ActorRef> targets) {
 		this.id = id;
 		this.appBolt = appBolt;
+		this.resourceMananger = resourceManager;
 		this.targets = new HashMap<String, ActorRef>();
 		this.sources = new HashMap<String, ActorRef>();
 		this.subOperatorRanges = new HashMap<ActorRef, Integer>();
 		
 		// Request initial resource
 		// [WARNING] Block here!
-		ResourceManager.Resources resources = null;
-		try {
-			resources =
-				ResourceManager.requestResource(appBolt.INITIAL_CONCURRENCY, resourceManager, getSelf());
-		} catch (Exception e) {
-			System.err.println(e.toString());
-		}
-		assert(resources != null); // It means resources are not available.
-		
-		List<String> nodes = resources.nodes;
+		this.resources = this.resourceMananger.allocateResource(appBolt.INITIAL_CONCURRENCY);
 		List<ActorRef> subOperators = new LinkedList<ActorRef>();
-		for (String node : nodes) {
+		for (Address resource : this.resources) {
 			// Start subOperator remotely
-			Address address = AddressFromURIString.parse(node);
 			ActorRef subOperator = getContext().actorOf(SubOperator.props(this.appBolt, getSelf(), targetRouters)
-					.withDeploy(new Deploy(new RemoteScope(address))));
+					.withDeploy(new Deploy(new RemoteScope(resource))));
 			subOperators.add(subOperator);
 		}
 		router = new RouteTree(subOperators);
