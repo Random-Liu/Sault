@@ -1,10 +1,14 @@
 package com.pku.sault.app.wordcount;
 
+import com.pku.sault.api.App;
 import com.pku.sault.api.Collector;
 import com.pku.sault.api.Bolt;
+import com.pku.sault.api.Config;
 import com.pku.sault.api.Tuple;
 
 public class WordCounter extends Bolt {
+	private static final long serialVersionUID = 1L;
+	
 	private Collector collector;
 	private String word;
 	private int wordCount;
@@ -13,6 +17,7 @@ public class WordCounter extends Bolt {
 	// TODO Set timeout function?
 	@Override
 	public void prepare(Collector collector) {
+		System.out.println("Have no idea");
 		this.collector = collector;
 		this.wordCount = 0;
 	}
@@ -29,5 +34,13 @@ public class WordCounter extends Bolt {
 	@Override
 	public void cleanup() {
 		this.collector.emit(new Tuple(word, wordCount));
+	}
+
+	public static void main(String[] args) {
+		Config config = new Config();
+		App app = new App(config);
+		app.addNode("A", new WordCounter());
+		app.addNode("B", new WordCounter());
+		app.addEdge("A", "B");
 	}
 }

@@ -13,8 +13,7 @@ import org.apache.spark.api.java.function.Function2;
 import akka.actor.ActorSystem;
 import akka.actor.Address;
 
-import com.pku.sault.util.SaultConfig;
-import com.typesafe.config.Config;
+import com.pku.sault.api.Config;
 import com.typesafe.config.ConfigFactory;
 
 /**
@@ -36,9 +35,10 @@ public class SparkResourceFactory {
 
 		public Iterator<Address> call(Integer index, Iterator<Integer> dummyIter)
 				throws Exception {
-			final String ACTOR_SYSTEM_NAME = "ebolt_node";
+			final String ACTOR_SYSTEM_NAME = "SaultWorker";
 			// TODO Set other configuration later
-			final Config systemConfig = ConfigFactory.parseString(""
+			// Use full name to avoid conflict with Config in API layer
+			final com.typesafe.config.Config systemConfig = ConfigFactory.parseString(""
 					+ "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
 					+ "akka.remote.netty.tcp.port = 0");
 			ActorSystem system = ActorSystem.create(ACTOR_SYSTEM_NAME+"-"+index, systemConfig);
@@ -50,7 +50,7 @@ public class SparkResourceFactory {
 	}
 	
 	// TODO Use context.addJars to deploy application
-	SparkResourceFactory(SaultConfig config) {
+	SparkResourceFactory(Config config) {
 		this.resourceOfNode = config.getResourceOfNode();
 		this.nodeNumber = config.getNodeNumber();
 		
@@ -126,7 +126,7 @@ public class SparkResourceFactory {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		SaultConfig config = new SaultConfig().setResourceOfNode(1).setNodeNumber(4);
+		Config config = new Config().setResourceOfNode(1).setNodeNumber(4);
 		SparkResourceFactory resourceFactory = new SparkResourceFactory(config);
 		// Test allocateResource
 		for (int i = 0; i < 2; ++i)

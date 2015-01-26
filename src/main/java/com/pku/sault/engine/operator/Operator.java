@@ -112,6 +112,7 @@ public class Operator extends UntypedActor {
 		this.appBolt = appBolt;
 		this.resourceMananger = resourceManager;
 		this.targets = new HashMap<String, ActorRef>();
+		this.targetRouters = new HashMap<String, RouteTree>();
 		this.sources = new HashMap<String, ActorRef>();
 		this.subOperatorRanges = new HashMap<ActorRef, Integer>();
 		

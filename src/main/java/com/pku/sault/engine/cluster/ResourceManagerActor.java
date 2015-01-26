@@ -7,17 +7,17 @@ import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
 
-import com.pku.sault.util.SaultConfig;
+import com.pku.sault.api.Config;
 
 class ResourceManagerActor extends UntypedActor {
 
     private SparkResourceFactory resourceFactory;
 	
-    ResourceManagerActor(SaultConfig config) {
+    ResourceManagerActor(Config config) {
     	this.resourceFactory = new SparkResourceFactory(config);
     }
     
-	static Props props(final SaultConfig config) {
+	static Props props(final Config config) {
 		return Props.create(new Creator<ResourceManagerActor>() {
 			private static final long serialVersionUID = 1L;
 			public ResourceManagerActor create() throws Exception {

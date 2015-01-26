@@ -27,16 +27,12 @@ class RouteTree implements Serializable {
 	}
 	
 	TreeMap<Integer, RouteTreeNode> routeMap;
-	
-	RouteTree(ActorRef target) {
-		routeMap = new TreeMap<Integer, RouteTreeNode>();
-		routeMap.put(0, new RouteTreeNode(Integer.MAX_VALUE, target));
-	}
-	
+
 	RouteTree(List<ActorRef> targets) {
 		Queue<Integer> lowerBounds = new LinkedList<Integer>();
 		Iterator<ActorRef> targetIter = targets.iterator();
 		assert(targetIter.hasNext());
+		routeMap = new TreeMap<Integer, RouteTreeNode>();
 		routeMap.put(0, new RouteTreeNode(Integer.MAX_VALUE, targetIter.next()));
 		lowerBounds.offer(0);
 		while (targetIter.hasNext()) {
@@ -97,8 +93,13 @@ class RouteTree implements Serializable {
 		int upperBound = oldRouteTreeNode.upperBound;
 		
 		assert(lowerBound < upperBound); // unit should never be split
-		
-		int middle = (lowerBound + upperBound) / 2;
+
+		// This will exceed integer limit
+		// int middle = (lowerBound + upperBound) / 2;
+		// Because lowerBound must be even:
+		// 	(lowerBound / 2 + upperBound / 2) == (lowerBound + upperBound) / 2
+		assert(lowerBound % 2 == 0);
+		int middle = (lowerBound / 2 + upperBound / 2);
 		RouteTreeNode newRouteTreeNode = new RouteTreeNode(upperBound, target);
 		oldRouteTreeNode.upperBound = middle;
 		routeMap.put(middle + 1, newRouteTreeNode);

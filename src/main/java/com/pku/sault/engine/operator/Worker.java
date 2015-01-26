@@ -5,6 +5,7 @@ import com.pku.sault.api.Tuple;
 
 import akka.actor.*;
 import akka.japi.Creator;
+import com.pku.sault.engine.util.Logger;
 
 class WorkerFactory {
 	private Bolt bolt;
@@ -29,7 +30,8 @@ class WorkerFactory {
 
 class Worker extends UntypedActor {
 	private Collector collector;
-	private Bolt ebolt;
+	private Bolt bolt;
+	private Logger logger;
 	
 	public static Props props(final Bolt appBolt, final ActorRef outputRouter) {
 		return Props.create(new Creator<Worker>() {
@@ -42,15 +44,17 @@ class Worker extends UntypedActor {
 	
 	// TODO Add configuration later
 	Worker(Bolt appBolt, ActorRef outputRouter) {
+		logger = new Logger(Logger.Role.WORKER);
 		collector = new Collector(outputRouter, getSelf());
-		ebolt = appBolt;
-		ebolt.prepare(collector);
+		bolt = appBolt;
+		bolt.prepare(collector);
+		logger.info("Started");
 	}
 	
 	@Override
 	public void onReceive(Object msg) throws Exception {
 		if (msg instanceof Tuple) {
-			ebolt.execute((Tuple)msg);
+			bolt.execute((Tuple) msg);
 			// TODO Flush every execution current now, can be optimized later. 
 			collector.flush();
 		} else unhandled(msg);
@@ -58,7 +62,8 @@ class Worker extends UntypedActor {
 	
 	@Override
 	public void postStop() {
-		ebolt.cleanup();
+		bolt.cleanup();
 		collector.flush(); // In case that application emit some message in cleanup stage.
+		logger.info("Stopped.");
 	}
 }

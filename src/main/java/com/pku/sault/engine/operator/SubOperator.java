@@ -9,6 +9,7 @@ import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
+import com.pku.sault.engine.util.Logger;
 
 class SubOperator extends UntypedActor {
 
@@ -25,15 +26,18 @@ class SubOperator extends UntypedActor {
 	private ActorRef inputRouter;
 	private ActorRef outputRouter;
 	private WorkerFactory workerFactory;
-	
+	private Logger logger;
+
 	SubOperator(Bolt appBolt, ActorRef manager, Map<String, RouteTree> routerTable) {
 		this.outputRouter = getContext().actorOf(OutputRouter.props(routerTable));
 		this.workerFactory = new WorkerFactory(appBolt, outputRouter);
 		this.inputRouter = getContext().actorOf(InputRouter.props(workerFactory));
 		this.manager = manager;
+		this.logger = new Logger(Logger.Role.SUB_OPERATOR);
 		
-		// Register Sub Operator Port to Monitor
+		// Register Sub Operator Port to Manager
 		this.manager.tell(new Port(this.inputRouter), getSelf());
+		logger.info("Started.");
 	}
 	
 	public static Props props(final Bolt appBolt, final ActorRef monitor, final Map<String, RouteTree> routerTable) {
@@ -47,8 +51,10 @@ class SubOperator extends UntypedActor {
 	
 	@Override
 	public void onReceive(Object msg) throws Exception {
-		if (msg instanceof Operator.Router)
+		if (msg instanceof Operator.Router) {
+			logger.info("Router updated.");
 			outputRouter.forward(msg, getContext());
+		}
 		else unhandled(msg);
 	}
 }

@@ -1,11 +1,15 @@
 package com.pku.sault.api;
 
+import java.io.Serializable;
+
 /**
  * An empty implementation of IEBolt
  * @author taotaotheripper
  *
  */
-public abstract class Bolt {
+public abstract class Bolt implements Serializable {
+	private static final long serialVersionUID = 1L;
+	
 	/* Default RECOMMEND_CONCURRENCY is 4, this is just
 	 * a recommend initial concurrency, in fact when
 	 * the framework is running it will change dynamically.

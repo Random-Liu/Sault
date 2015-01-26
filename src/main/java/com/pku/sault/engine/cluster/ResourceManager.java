@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.LinkedList;
 import java.util.List;
 
-import com.pku.sault.util.SaultConfig;
+import com.pku.sault.api.Config;
 
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -57,7 +57,7 @@ public class ResourceManager implements Serializable {
     
     private final ActorRef resourceManagerActor;
 	
-    public ResourceManager(SaultConfig config, ActorContext context) {
+    public ResourceManager(Config config, ActorContext context) {
     	this.resourceManagerActor = context.actorOf(ResourceManagerActor.props(config));
     }
     
