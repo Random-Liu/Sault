@@ -1,10 +1,10 @@
-package com.pku.ebolt.app.wordcount;
+package com.pku.sault.app.wordcount;
 
-import com.pku.ebolt.api.Collector;
-import com.pku.ebolt.api.EBolt;
-import com.pku.ebolt.api.Tuple;
+import com.pku.sault.api.Collector;
+import com.pku.sault.api.Bolt;
+import com.pku.sault.api.Tuple;
 
-public class WordCounter extends EBolt {
+public class WordCounter extends Bolt {
 	private Collector collector;
 	private String word;
 	private int wordCount;

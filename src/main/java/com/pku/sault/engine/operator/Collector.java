@@ -1,13 +1,13 @@
-package com.pku.ebolt.engine.operator;
+package com.pku.sault.engine.operator;
 
 import java.util.Iterator;
 import java.util.LinkedList;
 
 import akka.actor.ActorRef;
 
-import com.pku.ebolt.api.Tuple;
+import com.pku.sault.api.Tuple;
 
-class Collector implements com.pku.ebolt.api.Collector {
+class Collector implements com.pku.sault.api.Collector {
 	private LinkedList<Tuple> emitBuffer;
 	private ActorRef outputRouter;
 	private ActorRef worker;

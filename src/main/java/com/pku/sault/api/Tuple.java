@@ -1,4 +1,4 @@
-package com.pku.ebolt.api;
+package com.pku.sault.api;
 
 import java.io.Serializable;
 

@@ -1,4 +1,4 @@
-package com.pku.ebolt.engine.operator;
+package com.pku.sault.engine.operator;
 
 import java.io.Serializable;
 import java.util.HashMap;
@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import com.pku.ebolt.api.EBolt;
-import com.pku.ebolt.engine.cluster.ResourceManager;
+import com.pku.sault.api.Bolt;
+import com.pku.sault.engine.cluster.ResourceManager;
 
 import akka.actor.ActorContext;
 import akka.actor.ActorRef;
@@ -56,7 +56,7 @@ public class Operator extends UntypedActor {
     }
     
     // TODO Change to class later!
-    private EBolt appBolt;
+    private Bolt appBolt;
     private final String id;
 	private Map<String, ActorRef> targets;
 	private Map<String, RouteTree> targetRouters;
@@ -68,12 +68,12 @@ public class Operator extends UntypedActor {
 	private final ResourceManager resourceMananger;
 	private List<Address> resources;
 	
-	public static Props props(final String id, final EBolt appBolt, final ResourceManager resourceManager) {
+	public static Props props(final String id, final Bolt appBolt, final ResourceManager resourceManager) {
 		// Pass empty targets in constructor
 		return props(id, appBolt, resourceManager, new HashMap<String, ActorRef>());
 	}
 	
-	public static Props props(final String id, final EBolt appBolt, final ResourceManager resourceManager,
+	public static Props props(final String id, final Bolt appBolt, final ResourceManager resourceManager,
 			final Map<String, ActorRef> targets) {
 		return Props.create(new Creator<Operator>() {
 			private static final long serialVersionUID = 1L;
@@ -107,7 +107,7 @@ public class Operator extends UntypedActor {
 		operator.tell(new Target(targetID, null), context.self());
 	}
 	
-	Operator(String id, EBolt appBolt, ResourceManager resourceManager, Map<String, ActorRef> targets) {
+	Operator(String id, Bolt appBolt, ResourceManager resourceManager, Map<String, ActorRef> targets) {
 		this.id = id;
 		this.appBolt = appBolt;
 		this.resourceMananger = resourceManager;
@@ -118,6 +118,7 @@ public class Operator extends UntypedActor {
 		// Request initial resource
 		// [WARNING] Block here!
 		this.resources = this.resourceMananger.allocateResource(appBolt.INITIAL_CONCURRENCY);
+		assert(!this.resources.isEmpty()); // There must be resource to start the operator
 		List<ActorRef> subOperators = new LinkedList<ActorRef>();
 		for (Address resource : this.resources) {
 			// Start subOperator remotely

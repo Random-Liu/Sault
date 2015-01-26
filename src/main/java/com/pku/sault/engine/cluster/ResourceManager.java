@@ -1,10 +1,10 @@
-package com.pku.ebolt.engine.cluster;
+package com.pku.sault.engine.cluster;
 
 import java.io.Serializable;
 import java.util.LinkedList;
 import java.util.List;
 
-import com.pku.ebolt.util.EBoltConfig;
+import com.pku.sault.util.SaultConfig;
 
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -57,7 +57,7 @@ public class ResourceManager implements Serializable {
     
     private final ActorRef resourceManagerActor;
 	
-    public ResourceManager(EBoltConfig config, ActorContext context) {
+    public ResourceManager(SaultConfig config, ActorContext context) {
     	this.resourceManagerActor = context.actorOf(ResourceManagerActor.props(config));
     }
     

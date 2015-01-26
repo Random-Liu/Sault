@@ -1,4 +1,4 @@
-package com.pku.ebolt.engine.cluster;
+package com.pku.sault.engine.cluster;
 
 import java.util.List;
 
@@ -7,17 +7,17 @@ import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
 
-import com.pku.ebolt.util.EBoltConfig;
+import com.pku.sault.util.SaultConfig;
 
 class ResourceManagerActor extends UntypedActor {
 
     private SparkResourceFactory resourceFactory;
 	
-    ResourceManagerActor(EBoltConfig config) {
+    ResourceManagerActor(SaultConfig config) {
     	this.resourceFactory = new SparkResourceFactory(config);
     }
     
-	static Props props(final EBoltConfig config) {
+	static Props props(final SaultConfig config) {
 		return Props.create(new Creator<ResourceManagerActor>() {
 			private static final long serialVersionUID = 1L;
 			public ResourceManagerActor create() throws Exception {

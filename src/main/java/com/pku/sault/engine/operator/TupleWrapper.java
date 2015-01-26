@@ -1,8 +1,8 @@
-package com.pku.ebolt.engine.operator;
+package com.pku.sault.engine.operator;
 
 import java.io.Serializable;
 
-import com.pku.ebolt.api.Tuple;
+import com.pku.sault.api.Tuple;
 
 class TupleWrapper implements Serializable {
 	private static final long serialVersionUID = 1L;

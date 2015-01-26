@@ -1,4 +1,4 @@
-package com.pku.ebolt.engine.cluster;
+package com.pku.sault.engine.cluster;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -13,7 +13,7 @@ import org.apache.spark.api.java.function.Function2;
 import akka.actor.ActorSystem;
 import akka.actor.Address;
 
-import com.pku.ebolt.util.EBoltConfig;
+import com.pku.sault.util.SaultConfig;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 
@@ -50,7 +50,7 @@ public class SparkResourceFactory {
 	}
 	
 	// TODO Use context.addJars to deploy application
-	SparkResourceFactory(EBoltConfig config) {
+	SparkResourceFactory(SaultConfig config) {
 		this.resourceOfNode = config.getResourceOfNode();
 		this.nodeNumber = config.getNodeNumber();
 		
@@ -126,7 +126,7 @@ public class SparkResourceFactory {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		EBoltConfig config = new EBoltConfig().setResourceOfNode(1).setNodeNumber(4);
+		SaultConfig config = new SaultConfig().setResourceOfNode(1).setNodeNumber(4);
 		SparkResourceFactory resourceFactory = new SparkResourceFactory(config);
 		// Test allocateResource
 		for (int i = 0; i < 2; ++i)

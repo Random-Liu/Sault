@@ -1,8 +1,8 @@
-package com.pku.ebolt.util;
+package com.pku.sault.util;
 
 import java.io.Serializable;
 
-public class EBoltConfig implements Serializable {
+public class SaultConfig implements Serializable {
 	private static final long serialVersionUID = 1L;
 	
 	/**
@@ -15,15 +15,15 @@ public class EBoltConfig implements Serializable {
 	/**
 	 * Application Configuration
 	 */
-	private String applicationName = "EBolt";
+	private String applicationName = "Sault";
 	
-	public EBoltConfig() {}
+	public SaultConfig() {}
 
 	public int getNodeNumber() {
 		return nodeNumber;
 	}
 
-	public EBoltConfig setNodeNumber(int nodeNumber) {
+	public SaultConfig setNodeNumber(int nodeNumber) {
 		this.nodeNumber = nodeNumber;
 		return this;
 	}
@@ -32,7 +32,7 @@ public class EBoltConfig implements Serializable {
 		return resourceOfNode;
 	}
 
-	public EBoltConfig setResourceOfNode(int resourceOfNode) {
+	public SaultConfig setResourceOfNode(int resourceOfNode) {
 		this.resourceOfNode = resourceOfNode;
 		return this;
 	}
@@ -41,7 +41,7 @@ public class EBoltConfig implements Serializable {
 		return sparkMaster;
 	}
 
-	public EBoltConfig setSparkMaster(String sparkMaster) {
+	public SaultConfig setSparkMaster(String sparkMaster) {
 		this.sparkMaster = sparkMaster;
 		return this;
 	}
@@ -50,7 +50,7 @@ public class EBoltConfig implements Serializable {
 		return applicationName;
 	}
 
-	public EBoltConfig setApplicationName(String applicationName) {
+	public SaultConfig setApplicationName(String applicationName) {
 		this.applicationName = applicationName;
 		return this;
 	}

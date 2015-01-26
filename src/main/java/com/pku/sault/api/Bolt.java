@@ -1,11 +1,11 @@
-package com.pku.ebolt.api;
+package com.pku.sault.api;
 
 /**
  * An empty implementation of IEBolt
  * @author taotaotheripper
  *
  */
-public abstract class EBolt {
+public abstract class Bolt {
 	/* Default RECOMMEND_CONCURRENCY is 4, this is just
 	 * a recommend initial concurrency, in fact when
 	 * the framework is running it will change dynamically.
@@ -14,7 +14,7 @@ public abstract class EBolt {
 	 */
 	public int INITIAL_CONCURRENCY = 4;
 	public int MIN_CONCURRENCY = 2;
-	public int MAX_CONCURRENCY = 256;
+	public int MAX_CONCURRENCY = 16;
 	public abstract void prepare(Collector collector);
 	public abstract void execute(Tuple tuple);
 	public abstract void cleanup();
