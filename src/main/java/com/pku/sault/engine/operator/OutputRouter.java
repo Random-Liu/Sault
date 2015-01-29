@@ -31,6 +31,7 @@ class OutputRouter extends UntypedActor {
 			for (RouteTree router : routerTable.values()) {
 				assert(router != null);
 				ActorRef target = router.route(tupleWrapper);
+				System.out.println(target);
 				target.forward(msg, getContext());
 			}
 		} else if (msg instanceof Operator.Router) { // Add/Remove router

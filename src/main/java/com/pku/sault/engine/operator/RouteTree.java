@@ -4,7 +4,6 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.TreeMap;
@@ -28,7 +27,7 @@ class RouteTree implements Serializable {
 	
 	TreeMap<Integer, RouteTreeNode> routeMap;
 
-	RouteTree(List<ActorRef> targets) {
+	RouteTree(Iterable<ActorRef> targets) {
 		Queue<Integer> lowerBounds = new LinkedList<Integer>();
 		Iterator<ActorRef> targetIter = targets.iterator();
 		assert(targetIter.hasNext());
@@ -51,9 +50,9 @@ class RouteTree implements Serializable {
 	}
 	
 	ActorRef route(TupleWrapper tupleWrapper) {
-		int key = tupleWrapper.getKey().hashCode();
-		assert(key >= 0);
-		
+		// We can only handle positive number current now
+		int key = tupleWrapper.getKey().hashCode() & 0x7FFFFFFF;
+
 		Entry<Integer, RouteTreeNode> targetTableItem = routeMap.floorEntry(key);
 		return targetTableItem.getValue().target;
 	}

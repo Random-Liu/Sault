@@ -26,7 +26,7 @@ class Collector implements com.pku.sault.api.Collector {
 	final public void flush() {
 		Iterator<Tuple> tupleIter = emitBuffer.iterator();
 		while (tupleIter.hasNext())
-			outputRouter.tell(tupleIter.next(), worker);
+			outputRouter.tell(new TupleWrapper(tupleIter.next()), worker);
 		emitBuffer.clear();
 	}
 }

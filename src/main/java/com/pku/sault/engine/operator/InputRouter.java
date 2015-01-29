@@ -6,44 +6,78 @@ import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
+import akka.routing.ConsistentHashingPool;
+import akka.routing.ConsistentHashingRouter;
+import com.pku.sault.api.Task;
 
-class RouterMap {
-	private HashMap<Object, ActorRef> routerTable;
-	
-	RouterMap() {
-		routerTable = new HashMap<Object, ActorRef> ();
-	}
-	
-	boolean isTargetAvailable(TupleWrapper tupleWrapper) {
-		return routerTable.get(tupleWrapper.getKey())  != null;
-	}
-	
-	ActorRef route(TupleWrapper tupleWrapper) {
-		return routerTable.get(tupleWrapper.getKey());
-	}
-	
-	void setTarget(TupleWrapper tupleWrapper, ActorRef target) {
-		routerTable.put(tupleWrapper.getKey(), target);
+// TODO Make this configurable later
+class InputRouter {
+	// Factory function
+	static Props props (Task task, ActorRef outputRouter) {
+		Props workerProps = Worker.props(task, outputRouter);
+		if (task.INSTANCE_NUMBER == 0)
+			return DynamicInputRouter.props(workerProps);
+		else
+			return StaticHashRouter.props(task.INSTANCE_NUMBER, workerProps);
 	}
 }
 
-class InputRouter extends UntypedActor {
+// Hash router with fixed instance number
+class StaticHashRouter {
+	// Although the api is deprecated, this is the best way to impelement this function
+	// TODO Remove this deprecated api.
+	private static final ConsistentHashingRouter.ConsistentHashMapper hashMapper = new ConsistentHashingRouter.ConsistentHashMapper() {
+		@Override
+		public Object hashKey(Object msg) {
+			if (msg instanceof TupleWrapper)
+				return ((TupleWrapper) msg).getKey();
+			else
+				return null;
+		}
+	};
 
-	private WorkerFactory workerFactory;
+	static Props props(int instanceNumber, Props workerProps) {
+		return new ConsistentHashingPool(instanceNumber).props(workerProps);
+	}
+}
+
+// Hash router with dynamic changing instance number
+class DynamicInputRouter extends UntypedActor {
+
+	class RouterMap {
+		private HashMap<Object, ActorRef> routerTable;
+
+		RouterMap() {
+			routerTable = new HashMap<Object, ActorRef> ();
+		}
+
+		boolean isTargetAvailable(TupleWrapper tupleWrapper) {
+			return routerTable.get(tupleWrapper.getKey())  != null;
+		}
+
+		ActorRef route(TupleWrapper tupleWrapper) {
+			return routerTable.get(tupleWrapper.getKey());
+		}
+
+		void setTarget(TupleWrapper tupleWrapper, ActorRef target) {
+			routerTable.put(tupleWrapper.getKey(), target);
+		}
+	}
+
+	private Props workerProps;
 	private RouterMap routerMap;
 	
-	public static Props props(final WorkerFactory workerFactory) {
-		return Props.create(new Creator<InputRouter>() {
+	public static Props props(final Props workerProps) {
+		return Props.create(new Creator<DynamicInputRouter>() {
 			private static final long serialVersionUID = 1L;
-			public InputRouter create() throws Exception {
-				return new InputRouter(workerFactory);
+			public DynamicInputRouter create() throws Exception {
+				return new DynamicInputRouter(workerProps);
 			}
 		});
 	}
-	
-	InputRouter(WorkerFactory workerFactory) {
-		this.workerFactory = workerFactory;
-		this.workerFactory.setContext(getContext());
+
+	DynamicInputRouter(Props workerProps) {
+		this.workerProps = workerProps;
 		this.routerMap = new RouterMap();
 	}
 
@@ -53,7 +87,7 @@ class InputRouter extends UntypedActor {
 			TupleWrapper tupleWrapper = (TupleWrapper)msg;
 			ActorRef target = routerMap.route(tupleWrapper);
 			if (target == null) {
-				target = workerFactory.createWorker();
+				target = getContext().actorOf(workerProps);
 				routerMap.setTarget(tupleWrapper, target);
 			}
 			target.forward(msg, getContext());

@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.pku.sault.api.Config;
 
+import com.pku.sault.engine.util.Constants;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
@@ -24,9 +25,6 @@ import akka.util.Timeout;
  */
 public class ResourceManager implements Serializable {
 	private static final long serialVersionUID = 1L;
-	
-	static private long FUTURE_TIMEOUT = 120L; // 120 seconds
-	static private Timeout futureTimeout = new Timeout(Duration.create(FUTURE_TIMEOUT, "seconds"));
 	
     static class AllocateResource implements Serializable {
         private static final long serialVersionUID = 1L;
@@ -67,12 +65,12 @@ public class ResourceManager implements Serializable {
      * @return
      */
     public List<Address> allocateResource(int number) {
-    	Future<Object> resourcesFuture = Patterns.ask(resourceManagerActor, new AllocateResource(number), futureTimeout);
+    	Future<Object> resourcesFuture = Patterns.ask(resourceManagerActor, new AllocateResource(number), Constants.futureTimeout);
     	List<Address> resources;
     	try {
-			resources = ((Resources)Await.result(resourcesFuture, futureTimeout.duration())).resources;
+			resources = ((Resources)Await.result(resourcesFuture, Constants.futureTimeout.duration())).resources;
     	} catch (Exception e) {
-    		System.err.println(e);
+            e.printStackTrace();
     		resources = new LinkedList<Address>(); //Return an empty resource list
     	}
 		return resources;
@@ -85,7 +83,7 @@ public class ResourceManager implements Serializable {
      * @param context
      */
     public void asyncAllocateResource(int number, ActorContext context) {
-    	Future<Object> resourcesFuture = Patterns.ask(resourceManagerActor, new AllocateResource(number), futureTimeout);
+    	Future<Object> resourcesFuture = Patterns.ask(resourceManagerActor, new AllocateResource(number), Constants.futureTimeout);
     	Patterns.pipe(resourcesFuture, context.dispatcher()).to(context.self());
     }
     

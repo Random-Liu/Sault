@@ -4,6 +4,7 @@ import java.io.Serializable;
 
 import com.pku.sault.api.Tuple;
 
+// TODO Can also implement random tuple wrapper by set a random key to tupleWrapper
 class TupleWrapper implements Serializable {
 	private static final long serialVersionUID = 1L;
 	private final Tuple tuple;
@@ -14,5 +15,9 @@ class TupleWrapper implements Serializable {
 	
 	Object getKey() {
 		return tuple.getKey();
+	}
+
+	Tuple getTuple() {
+		return tuple;
 	}
 }
