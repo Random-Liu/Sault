@@ -5,10 +5,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.pku.sault.api.Task;
+import com.pku.sault.api.Bolt;
+import com.pku.sault.api.Spout;
 import com.pku.sault.api.Config;
 import com.pku.sault.engine.cluster.ResourceManager;
-import com.pku.sault.engine.operator.Operator;
+import com.pku.sault.engine.operator.BoltOperator;
 
 import akka.actor.ActorRef;
 import akka.actor.Address;
@@ -17,6 +18,8 @@ import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
 import akka.remote.RemoteScope;
+import com.pku.sault.engine.operator.Operator;
+import com.pku.sault.engine.operator.SpoutOperator;
 
 public class Driver extends UntypedActor {
 	public static class Edge implements Serializable {
@@ -33,19 +36,40 @@ public class Driver extends UntypedActor {
 			this.toAdd = toAdd;
 		}
 	}
-	
-	public static class Node implements Serializable {
+
+	private static class Node implements Serializable {
 		private static final long serialVersionUID = 1L;
 		final String Id;
-		final Task task;
 		final boolean toAdd;
-		public Node(String Id, Task task) {
-			this(Id, task, true);
-		}
-		public Node(String Id, Task task, boolean toAdd) {
+		Node(String Id, boolean toAdd) {
 			this.Id = Id;
-			this.task = task;
 			this.toAdd = toAdd;
+		}
+	}
+
+	public static class BoltNode extends Node {
+		private static final long serialVersionUID = 1L;
+		final Bolt bolt;
+		public BoltNode(String Id, Bolt bolt) {
+			super(Id, true);
+			this.bolt = bolt;
+		}
+		public BoltNode(String Id, Bolt bolt, boolean toAdd) {
+			super(Id, toAdd);
+			this.bolt = bolt;
+		}
+	}
+
+	public static class SpoutNode extends Node {
+		private static final long serialVersionUID = 1L;
+		final Spout spout;
+		public SpoutNode(String Id, Spout spout) {
+			super(Id, true);
+			this.spout = spout;
+		}
+		public SpoutNode(String Id, Spout spout, boolean toAdd) {
+			super(Id, toAdd);
+			this.spout = spout;
 		}
 	}
 	
@@ -77,8 +101,14 @@ public class Driver extends UntypedActor {
 					// [Caution] Block here!
 					List<Address> resource = resourceManager.allocateResource(1);
 					assert(!resource.isEmpty()); // There should be extra resource
-					ActorRef newOperator = getContext().actorOf(Operator.props(node.Id, node.task, resourceManager)
-							.withDeploy(new Deploy(new RemoteScope(resource.get(0)))));
+					ActorRef newOperator;
+					if (msg instanceof BoltNode) {
+						newOperator = getContext().actorOf(BoltOperator.props(node.Id, ((BoltNode) msg).bolt,
+								resourceManager).withDeploy(new Deploy(new RemoteScope(resource.get(0)))));
+					} else {
+						newOperator = getContext().actorOf(SpoutOperator.props(node.Id, ((SpoutNode) msg).spout,
+								resourceManager).withDeploy(new Deploy(new RemoteScope(resource.get(0)))));
+					}
 					operators.put(node.Id, newOperator);
 				} else
 					System.err.println("The node: " + node.Id + " already exsits.");

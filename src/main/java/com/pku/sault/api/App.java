@@ -31,12 +31,17 @@ public class App {
 		this.system = ActorSystem.create(DRIVER_SYSTEM_NAME, systemConfig);
 		this.driver = system.actorOf(Driver.props(this.config));
 	}
-	
-	// TODO Set input and output later, also use edge.
+
 	// TODO Create node graph, check placement of spouts and bolts.
-	public boolean addNode(String id, Task task) {
+	public boolean addNode(String id, Bolt bolt) {
 		// Should be no sender
-		driver.tell(new Driver.Node(id, task), null);
+		driver.tell(new Driver.BoltNode(id, bolt), null);
+		return true;
+	}
+
+	public boolean addNode(String id, Spout spout) {
+		// Should be no sender
+		driver.tell(new Driver.SpoutNode(id, spout), null);
 		return true;
 	}
 	

@@ -1,16 +1,53 @@
 package com.pku.sault.engine.operator;
 
-import java.io.Serializable;
 import java.util.Map;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
-import com.pku.sault.api.Task;
+import akka.routing.BroadcastPool;
+import com.pku.sault.api.Bolt;
+import com.pku.sault.api.Spout;
 import com.pku.sault.engine.util.Logger;
 
-class SubOperator extends UntypedActor {
+class SpoutSubOperator extends UntypedActor {
+	private ActorRef manager;
+	private ActorRef workerPool;
+	private ActorRef outputRouter;
+	private Logger logger;
+
+	SpoutSubOperator(Spout spout, Map<String, RouteTree> routerTable) {
+		this.outputRouter = getContext().actorOf(OutputRouter.props(routerTable));
+		// In fact there is no input, using BroadcastPool so that we can send command
+		// to the workers in the future.
+		this.workerPool = getContext().actorOf(new BroadcastPool(spout.getInstanceNumber()).props(
+				SpoutWorker.props(spout, outputRouter)));
+		this.manager = getContext().parent();
+		this.logger = new Logger(Logger.Role.SUB_OPERATOR);
+
+		logger.info("Spout Sub-Operator Started.");
+	}
+
+	static Props props(final Spout spout, final Map<String, RouteTree> routerTable) {
+		return Props.create(new Creator<SpoutSubOperator>() {
+			private static final long serialVersionUID = 1L;
+			public SpoutSubOperator create() throws Exception {
+				return new SpoutSubOperator(spout, routerTable);
+			}
+		});
+	}
+
+	@Override
+	public void onReceive(Object msg) throws Exception {
+		if (msg instanceof Operator.Router) {
+			outputRouter.forward(msg, getContext());
+			logger.info("Router updated.");
+		} unhandled(msg);
+	}
+}
+
+class BoltSubOperator extends UntypedActor {
 	static enum PureMsg {
 		PORT_REQUEST
 	} // Add more if needed
@@ -20,20 +57,20 @@ class SubOperator extends UntypedActor {
 	private ActorRef outputRouter;
 	private Logger logger;
 
-	SubOperator(Task task, ActorRef manager, Map<String, RouteTree> routerTable) {
+	BoltSubOperator(Bolt bolt, Map<String, RouteTree> routerTable) {
 		this.outputRouter = getContext().actorOf(OutputRouter.props(routerTable));
-		this.inputRouter = getContext().actorOf(InputRouter.props(task, outputRouter));
-		this.manager = manager;
+		this.inputRouter = getContext().actorOf(InputRouter.props(BoltWorker.props(bolt, outputRouter)));
+		this.manager = getContext().parent(); // This hasn't been used.
 		this.logger = new Logger(Logger.Role.SUB_OPERATOR);
 
-		logger.info("Started.");
+		logger.info("Bolt Sub-Operator Started.");
 	}
 
-	static Props props(final Task task, final ActorRef manager, final Map<String, RouteTree> routerTable) {
-		return Props.create(new Creator<SubOperator>() {
+	static Props props(final Bolt bolt, final Map<String, RouteTree> routerTable) {
+		return Props.create(new Creator<BoltSubOperator>() {
 			private static final long serialVersionUID = 1L;
-			public SubOperator create() throws Exception {
-				return new SubOperator(task, manager, routerTable);
+			public BoltSubOperator create() throws Exception {
+				return new BoltSubOperator(bolt, routerTable);
 			}
 		});
 	}

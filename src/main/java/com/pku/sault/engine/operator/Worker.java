@@ -2,8 +2,6 @@ package com.pku.sault.engine.operator;
 
 import com.pku.sault.api.Bolt;
 import com.pku.sault.api.Spout;
-import com.pku.sault.api.Task;
-import com.pku.sault.api.Tuple;
 
 import akka.actor.*;
 import akka.japi.Creator;
@@ -12,37 +10,30 @@ import scala.concurrent.duration.Duration;
 
 import java.util.concurrent.TimeUnit;
 
-class Worker {
-	// Factory function
-	static Props props(Task task, ActorRef outputRouter) {
-		assert (task instanceof Bolt || task instanceof Spout); // Just in case
-		if (task instanceof Bolt) // Start different worker for different task
-			return BoltWorker.props(task, outputRouter);
-		else
-			return SpoutWorker.props(task, outputRouter);
-	}
-}
-
 class BoltWorker extends UntypedActor {
 	private Collector collector;
 	private Bolt bolt;
 	private Logger logger;
 
-	static Props props(final Task task, final ActorRef outputRouter) {
+	static Props props(final Bolt bolt, final ActorRef outputRouter) {
 		return Props.create(new Creator<BoltWorker>() {
 			private static final long serialVersionUID = 1L;
 			public BoltWorker create() throws Exception {
-				return new BoltWorker(task, outputRouter);
+				return new BoltWorker(bolt, outputRouter);
 			}
 		});
 	}
 
-	BoltWorker(Task task, ActorRef outputRouter) {
-		assert(task instanceof Bolt); // Just ensure
+	BoltWorker(Bolt boltTemplate, ActorRef outputRouter) {
 		logger = new Logger(Logger.Role.WORKER);
 		collector = new Collector(outputRouter, getSelf());
-		// Use copied task, so that worker will not affect each other
-		this.bolt = (Bolt)task.clone();
+		// Use copied bolt, so that worker will not affect each other
+		try {
+			bolt = boltTemplate.clone();
+		} catch (CloneNotSupportedException e) {
+			e.printStackTrace();
+		}
+		assert bolt != null;
 		bolt.prepare(collector);
 		logger.info("Bolt Started");
 	}
@@ -70,11 +61,11 @@ class SpoutWorker extends UntypedActor {
 	private Logger logger;
 	private  Cancellable scheduler;
 
-	static Props props(final Task task, final ActorRef outputRouter) {
+	static Props props(final Spout spout, final ActorRef outputRouter) {
 		return Props.create(new Creator<SpoutWorker>() {
 			private static final long serialVersionUID = 1L;
 			public SpoutWorker create() throws Exception {
-				return new SpoutWorker(task, outputRouter);
+				return new SpoutWorker(spout, outputRouter);
 			}
 		});
 	}
@@ -83,12 +74,16 @@ class SpoutWorker extends UntypedActor {
 		EMIT
 	}
 
-	SpoutWorker(Task task, ActorRef outputRouter) {
-		assert(task instanceof Spout); // Just ensure
+	SpoutWorker(Spout spoutTemplate, ActorRef outputRouter) {
 		logger = new Logger(Logger.Role.WORKER);
 		collector = new Collector(outputRouter, getSelf());
-		// Use copied task, so that worker will not affect each other
-		spout = (Spout)task.clone();
+		// Use copied spout, so that worker will not affect each other
+		try {
+			spout = spoutTemplate.clone();
+		} catch (CloneNotSupportedException e) {
+			e.printStackTrace();
+		}
+		assert spout != null;
 		spout.open(collector);
 		logger.info("Spout Started");
 		getSelf().tell(SpoutCmd.EMIT, self()); // Start emitting

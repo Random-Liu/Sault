@@ -6,8 +6,8 @@ class Emitter extends Spout {
 	private Collector collector;
 
 	Emitter () {
-		this.INSTANCE_NUMBER = 2;
-		this.PARALLELISM = 2;
+		setInstanceNumber(2);
+		setParallelism(2);
 	}
 
 	@Override
