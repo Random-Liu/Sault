@@ -39,10 +39,10 @@ public class Operator {
 
     /**
      * Add target to operator.
-     * @param targetID
-     * @param target
-     * @param operator
-     * @param context
+     * @param targetID Operator ID of new target operator
+     * @param target ActorRef of new target operator
+     * @param operator ActorRef of source operator
+     * @param context ActorContext used to send control message
      */
     public static void addTarget(String targetID, ActorRef target, ActorRef operator, ActorContext context) {
         operator.tell(new Target(targetID, target), context.self());
@@ -52,9 +52,9 @@ public class Operator {
      * Remove target from operator.
      * TODO The framework have the ability to remove target, try to make use of it later.
      * TODO When to remove source?
-     * @param targetID
-     * @param operator
-     * @param context
+     * @param targetID Operator ID of target operator to be removed
+     * @param operator ActorRef of source operator
+     * @param context ActorContext used to send control message
      */
     public static void removeTarget(String targetID, ActorRef operator, ActorContext context) {
         // Pass null to remove the target
