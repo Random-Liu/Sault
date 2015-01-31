@@ -11,10 +11,10 @@ import akka.japi.Creator;
 class InputRouter extends UntypedActor {
 
 	class RouterMap {
-		private HashMap<Object, ActorRef> routerTable;
+		private HashMap<KeyWrapper, ActorRef> routerTable;
 
 		RouterMap() {
-			routerTable = new HashMap<Object, ActorRef> ();
+			routerTable = new HashMap<KeyWrapper, ActorRef> ();
 		}
 
 		boolean isTargetAvailable(TupleWrapper tupleWrapper) {

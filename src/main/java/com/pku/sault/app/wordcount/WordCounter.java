@@ -74,8 +74,13 @@ public class WordCounter {
 	public static void main(String[] args) {
 		Config config = new Config();
 		App app = new App(config);
-		app.addNode("Counter", new Counter());
-		app.addNode("Emitter", new Emitter());
-		app.addEdge("Emitter", "Counter");
+		System.out.println(app.addNode("Counter", new Counter()));
+		System.out.println(app.addNode("Counter", new Counter()));
+		System.out.println(app.addNode("Emitter", new Emitter()));
+		System.out.println(app.addNode("Emitter", new Emitter()));
+		System.out.println(app.addEdge("Emitter", "Counter"));
+		System.out.println(app.addEdge("Emit", "Counter"));
+		System.out.println(app.addEdge("Emitter", "Count"));
+		System.out.println(app.addEdge("Emitter", "Counter"));
 	}
 }

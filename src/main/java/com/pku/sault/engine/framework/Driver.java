@@ -2,6 +2,7 @@ package com.pku.sault.engine.framework;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +21,7 @@ import akka.japi.Creator;
 import akka.remote.RemoteScope;
 import com.pku.sault.engine.operator.Operator;
 import com.pku.sault.engine.operator.SpoutOperator;
+import com.pku.sault.engine.util.Logger;
 
 public class Driver extends UntypedActor {
 	public static class Edge implements Serializable {
@@ -40,9 +42,11 @@ public class Driver extends UntypedActor {
 	private static class Node implements Serializable {
 		private static final long serialVersionUID = 1L;
 		final String Id;
+		final List<String> targets;
 		final boolean toAdd;
-		Node(String Id, boolean toAdd) {
+		Node(String Id, List<String> targets, boolean toAdd) {
 			this.Id = Id;
+			this.targets = targets;
 			this.toAdd = toAdd;
 		}
 	}
@@ -50,12 +54,12 @@ public class Driver extends UntypedActor {
 	public static class BoltNode extends Node {
 		private static final long serialVersionUID = 1L;
 		final Bolt bolt;
-		public BoltNode(String Id, Bolt bolt) {
-			super(Id, true);
+		public BoltNode(String Id, Bolt bolt, List<String> targets) {
+			super(Id, targets, true);
 			this.bolt = bolt;
 		}
-		public BoltNode(String Id, Bolt bolt, boolean toAdd) {
-			super(Id, toAdd);
+		public BoltNode(String Id, Bolt bolt, List<String> targets, boolean toAdd) {
+			super(Id, targets, toAdd);
 			this.bolt = bolt;
 		}
 	}
@@ -63,12 +67,12 @@ public class Driver extends UntypedActor {
 	public static class SpoutNode extends Node {
 		private static final long serialVersionUID = 1L;
 		final Spout spout;
-		public SpoutNode(String Id, Spout spout) {
-			super(Id, true);
+		public SpoutNode(String Id, Spout spout, List<String> targets) {
+			super(Id, targets, true);
 			this.spout = spout;
 		}
-		public SpoutNode(String Id, Spout spout, boolean toAdd) {
-			super(Id, toAdd);
+		public SpoutNode(String Id, Spout spout, List<String> targets, boolean toAdd) {
+			super(Id, targets, toAdd);
 			this.spout = spout;
 		}
 	}
@@ -76,11 +80,13 @@ public class Driver extends UntypedActor {
 	private final Config config; // TODO Pass this to operator later
 	private ResourceManager resourceManager;
 	private Map<String, ActorRef> operators;
+	private Logger logger;
 	
 	Driver(Config config) {
 		this.config = config;
 		this.operators = new HashMap<String, ActorRef>();
 		this.resourceManager = new ResourceManager(this.config, getContext());
+		this.logger = new Logger(Logger.Role.DRIVER);
 	}
 	
 	public static Props props(final Config config) {
@@ -101,17 +107,23 @@ public class Driver extends UntypedActor {
 					// [Caution] Block here!
 					List<Address> resource = resourceManager.allocateResource(1);
 					assert(!resource.isEmpty()); // There should be extra resource
+					HashMap<String, ActorRef> targets = null; // If there is no targets, just set this to null
+					if (node.targets != null) {
+						targets = new HashMap<String, ActorRef>();
+						for (String target : node.targets)
+							targets.put(target, operators.get(target));
+					}
 					ActorRef newOperator;
 					if (msg instanceof BoltNode) {
 						newOperator = getContext().actorOf(BoltOperator.props(node.Id, ((BoltNode) msg).bolt,
-								resourceManager).withDeploy(new Deploy(new RemoteScope(resource.get(0)))));
+								resourceManager, targets).withDeploy(new Deploy(new RemoteScope(resource.get(0)))));
 					} else {
 						newOperator = getContext().actorOf(SpoutOperator.props(node.Id, ((SpoutNode) msg).spout,
-								resourceManager).withDeploy(new Deploy(new RemoteScope(resource.get(0)))));
+								resourceManager, targets).withDeploy(new Deploy(new RemoteScope(resource.get(0)))));
 					}
 					operators.put(node.Id, newOperator);
 				} else
-					System.err.println("The node: " + node.Id + " already exsits.");
+					logger.error("The node: " + node.Id + " already exists.");
 			} else { // Remove operator
 				// TODO Can't directly kill, deal with this later
 			}
@@ -123,7 +135,7 @@ public class Driver extends UntypedActor {
 					ActorRef target = operators.get(edge.targetId);
 					Operator.addTarget(edge.targetId, target, source, getContext());
 				} else
-					System.err.println("The edge: " + edge.sourceId + "-" + edge.targetId + " already exsits.");
+					logger.error("The edge between invalid nodes: " + edge.sourceId + "-" + edge.targetId);
 			} else { // Remove edge
 				// TODO Can't directly remove, deal with this later
 			}

@@ -50,8 +50,9 @@ class RouteTree implements Serializable {
 	}
 	
 	ActorRef route(TupleWrapper tupleWrapper) {
+		int key = tupleWrapper.getKey().hashCode();
 		// We can only handle positive number current now
-		int key = tupleWrapper.getKey().hashCode() & 0x7FFFFFFF;
+		assert key >= 0;
 
 		Entry<Integer, RouteTreeNode> targetTableItem = routeMap.floorEntry(key);
 		return targetTableItem.getValue().target;
