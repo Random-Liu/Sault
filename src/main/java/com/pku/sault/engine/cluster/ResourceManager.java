@@ -69,7 +69,7 @@ public class ResourceManager implements Serializable {
     	List<Address> resources;
     	try {
 			resources = ((Resources)Await.result(resourcesFuture, Constants.futureTimeout.duration())).resources;
-    	} catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
     		resources = new LinkedList<Address>(); //Return an empty resource list
     	}

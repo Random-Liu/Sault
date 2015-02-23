@@ -46,6 +46,10 @@ public class App {
 			graph.remove(id);
 			return true;
 		}
+        boolean hasNode(String id) {
+            Node node = graph.get(id);
+            return node != null && !node.isSource();
+        }
 		boolean addEdge(String sourceId, String targetId) {
 			Node source = graph.get(sourceId);
 			Node target = graph.get(targetId);
@@ -104,7 +108,7 @@ public class App {
 				}
 			}
 		}
-		driver.tell(new Driver.BoltNode(id, bolt, targetIds), null);
+		driver.tell(new Driver.BoltNode(id, bolt, targetIds), ActorRef.noSender());
 		return true;
 	}
 
@@ -118,19 +122,26 @@ public class App {
 				}
 			}
 		}
-		driver.tell(new Driver.SpoutNode(id, spout, targetIds), null);
+		driver.tell(new Driver.SpoutNode(id, spout, targetIds), ActorRef.noSender());
 		return true;
 	}
 
 	public boolean addEdge(String sourceId, String targetId) {
 		if (!graph.addEdge(sourceId, targetId)) return false;
-		driver.tell(new Driver.Edge(sourceId, targetId), null);
+		driver.tell(new Driver.Edge(sourceId, targetId), ActorRef.noSender());
 		return true;
 	}
-	
+
 	// TODO Add remove later
 	// public boolean removeNode(String id)
 	
 	// TODO Add remove edge later
 	// public boolean removeEdge(String sourceId, String targetId);
+
+    // Manually split bolt, this is only used in testing
+    public boolean splitNode(String boltId) {
+        if (!graph.hasNode(boltId)) return false;
+        driver.tell(new Driver.Split(boltId), ActorRef.noSender());
+        return true;
+    }
 }

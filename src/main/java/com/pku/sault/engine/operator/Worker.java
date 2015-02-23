@@ -1,5 +1,6 @@
 package com.pku.sault.engine.operator;
 
+import akka.japi.Procedure;
 import com.pku.sault.api.Bolt;
 import com.pku.sault.api.Spout;
 
@@ -8,24 +9,87 @@ import akka.japi.Creator;
 import com.pku.sault.engine.util.Logger;
 import scala.concurrent.duration.Duration;
 
+import java.io.Serializable;
+import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
+class BoltWorkerFactory {
+    Bolt bolt;
+    ActorRef outputRouter;
+    BoltWorkerFactory(Bolt bolt, ActorRef outputRouter) {
+        this.bolt = bolt;
+        this.outputRouter = outputRouter;
+    }
+
+    Props worker(KeyWrapper key) {
+        return BoltWorker.props(key, bolt, outputRouter, null);
+    }
+
+    Props takeOverWorker(KeyWrapper key, ActorRef originalPort) {
+        return BoltWorker.props(key, bolt, outputRouter, originalPort);
+    }
+}
+
 class BoltWorker extends UntypedActor {
+    // Current now, Get is sent by the input router, because it knows the original port
+    // and original bolt better than the new bolt.
+    static class TakeOver implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final KeyWrapper key;
+        TakeOver(KeyWrapper key) {
+            this.key = key;
+        }
+    }
+
+    static class State implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final Object state;
+        State(Object state) {
+            this.state = state;
+        }
+    }
+
+    // TODO Make sure the buffer should not be too long (In fact if too long, we can do nothing)
+    private class MessageBuffer { // Used for blocking messages
+        private class BufferElement {
+            final Object msg;
+            final ActorRef sender;
+            BufferElement(Object msg, ActorRef sender) {
+                this.msg = msg;
+                this.sender = sender;
+            }
+        }
+        LinkedList<BufferElement> buffer = new LinkedList<BufferElement>();
+
+        void buffer(Object msg, ActorRef sender) {
+            buffer.push(new BufferElement(msg, sender));
+        }
+
+        void flush(ActorRef target) {
+            for (BufferElement bufferElement : buffer)
+                target.tell(bufferElement.msg, bufferElement.sender);
+            buffer.clear();
+        }
+    }
+
+    private KeyWrapper key;
 	private Collector collector;
 	private Bolt bolt;
 	private Logger logger;
+    private MessageBuffer messageBuffer;
 
-	static Props props(final Bolt bolt, final ActorRef outputRouter) {
+	static Props props(final KeyWrapper key, final Bolt bolt, final ActorRef outputRouter, final ActorRef originalPort) {
 		return Props.create(new Creator<BoltWorker>() {
 			private static final long serialVersionUID = 1L;
 			public BoltWorker create() throws Exception {
-				return new BoltWorker(bolt, outputRouter);
+                return new BoltWorker(key, bolt, outputRouter, originalPort);
 			}
 		});
 	}
 
-	BoltWorker(Bolt boltTemplate, ActorRef outputRouter) {
-		logger = new Logger(Logger.Role.WORKER);
+	BoltWorker(KeyWrapper key, Bolt boltTemplate, ActorRef outputRouter, ActorRef originalPort) {
+		this.key = key;
+        logger = new Logger(Logger.Role.WORKER);
 		collector = new Collector(outputRouter, getSelf());
 		// Use copied bolt, so that worker will not affect each other
 		try {
@@ -34,17 +98,44 @@ class BoltWorker extends UntypedActor {
 			e.printStackTrace();
 		}
 		assert bolt != null;
-		bolt.prepare(collector);
-		logger.info("Bolt Started");
+        bolt.prepare(collector);
+		logger.info("Bolt Started on " + getContext().system().name());
+
+        if (originalPort != null) { // The bolt should take over original bolt
+            logger.info("Bolt Start Migrating From " + originalPort);
+            originalPort.tell(new TakeOver(this.key), getSelf());
+            messageBuffer = new MessageBuffer();
+            getContext().become(MIGRATING);
+        }
 	}
-	
+
+    private Procedure<Object> MIGRATING = new Procedure<Object>() {
+        @Override
+        public void apply(Object msg) {
+            // Loop and wait for original state
+            if (msg instanceof State) {
+                bolt.set(((State) msg).state);
+                messageBuffer.flush(getSelf());
+                getContext().unbecome(); // Finish migrating
+                logger.info("Bolt State Set");
+            } else // Blocking the message in the buffer, and they will be processed after migrating.
+                messageBuffer.buffer(msg, getSender());
+        }
+    };
+
 	@Override
 	public void onReceive(Object msg) throws Exception {
-		if (msg instanceof TupleWrapper) {
-			bolt.execute(((TupleWrapper) msg).getTuple());
-			// TODO Flush every execution current now, can be optimized later.
-			collector.flush();
-		} else unhandled(msg);
+        if (msg instanceof TupleWrapper) {
+            assert ((TupleWrapper) msg).getKey().equals(key); // Just make sure
+            bolt.execute(((TupleWrapper) msg).getTuple());
+            // TODO Flush every execution current now, can be optimized later.
+            collector.flush();
+        } else if (msg instanceof TakeOver) {
+            logger.info("Bolt Start Migrating to " + getSender());
+            Object state = bolt.get();
+            getSender().tell(new State(state), getSelf()); // Transfer state to the new bolt
+            getContext().stop(getSelf()); // Stop itself
+        } else unhandled(msg);
 	}
 	
 	@Override
@@ -104,7 +195,7 @@ class SpoutWorker extends UntypedActor {
 	@Override
 	public void postStop() {
 		scheduler.cancel(); // Cancel the scheduler
-		spout.close();
+        spout.close();
 		collector.flush(); // In case that application emit some message in close stage.
 		logger.info("Spout Stopped.");
 	}

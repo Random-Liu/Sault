@@ -14,7 +14,7 @@ class TupleWrapper implements Serializable {
 		this.tuple = tuple;
 		this.key = new KeyWrapper(tuple.getKey());
 	}
-	
+
 	KeyWrapper getKey() {
 		return this.key;
 	}

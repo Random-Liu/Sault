@@ -5,7 +5,7 @@ import java.io.Serializable;
 /**
  * Bolt processing tuples.
  * @author taotaotheripper
- *
+ * TODO Add Stateless Bolt later
  */
 public abstract class Bolt implements Cloneable, Serializable {
 	private static final long serialVersionUID = 1L;
@@ -15,10 +15,14 @@ public abstract class Bolt implements Cloneable, Serializable {
 	private int initialParallelism = 4;
 	private int maxInstanceNumber = 1024; // TODO More consideration later
 
+    // [Caution] prepare and cleanup will also be called during migration
 	public abstract void prepare(Collector collector);
 	public abstract void execute(Tuple tuple);
 	public abstract void cleanup();
+    public abstract Object get();
+    public abstract void set(Object state);
 
+    // Parallelism should be set before added to the graph
 	public int getMinParallelism() {
 		return minParallelism;
 	}

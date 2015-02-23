@@ -6,17 +6,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import akka.actor.*;
 import com.pku.sault.api.Bolt;
 import com.pku.sault.api.Spout;
 import com.pku.sault.api.Config;
 import com.pku.sault.engine.cluster.ResourceManager;
 import com.pku.sault.engine.operator.BoltOperator;
 
-import akka.actor.ActorRef;
-import akka.actor.Address;
-import akka.actor.Deploy;
-import akka.actor.Props;
-import akka.actor.UntypedActor;
 import akka.japi.Creator;
 import akka.remote.RemoteScope;
 import com.pku.sault.engine.operator.Operator;
@@ -76,7 +72,16 @@ public class Driver extends UntypedActor {
 			this.spout = spout;
 		}
 	}
-	
+
+    // Current now only used for test
+    public static class Split implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final String boltId;
+        public Split(String boltId) {
+            this.boltId = boltId;
+        }
+    }
+
 	private final Config config; // TODO Pass this to operator later
 	private ResourceManager resourceManager;
 	private Map<String, ActorRef> operators;
@@ -139,6 +144,12 @@ public class Driver extends UntypedActor {
 			} else { // Remove edge
 				// TODO Can't directly remove, deal with this later
 			}
-		} else unhandled(msg);
+		} else if (msg instanceof Split) { // Only used for test
+            Split split = (Split)msg;
+            if (operators.containsKey(split.boltId)) {
+                ActorRef operator = operators.get(split.boltId);
+                operator.tell(BoltOperator.Test.SPLIT, getSelf());
+            }
+        } else unhandled(msg);
 	}
 }

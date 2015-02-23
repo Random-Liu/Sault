@@ -18,18 +18,18 @@ class Emitter extends Spout {
 	@Override
 	public long nextTuple() {
 		System.out.println("Emitting");
-		collector.emit(new Tuple("test", 1));
-		collector.emit(new Tuple("asdf", 1));
-		collector.emit(new Tuple("tezxcvst", 1));
-		collector.emit(new Tuple("teswrst", 1));
-		collector.emit(new Tuple("teqwevst", 1));
-		collector.emit(new Tuple("qwer", 1));
-		collector.emit(new Tuple("teqwecvst", 1));
-		collector.emit(new Tuple("teqwevzxcvxcst", 1));
-		collector.emit(new Tuple("asd", 1));
-		collector.emit(new Tuple("vxzvb", 1));
-		collector.emit(new Tuple("qwerer", 1));
-		return 5000; // Every 1s send test once, just for test
+		collector.emit(new Tuple("a", 1));
+		collector.emit(new Tuple("b", 1));
+		collector.emit(new Tuple("c", 1));
+		collector.emit(new Tuple("d", 1));
+		collector.emit(new Tuple("e", 1));
+		collector.emit(new Tuple("f", 1));
+		collector.emit(new Tuple("g", 1));
+		collector.emit(new Tuple("h", 1));
+		collector.emit(new Tuple("i", 1));
+		collector.emit(new Tuple("j", 1));
+		collector.emit(new Tuple("k", 1));
+		return 1000; // Every 1s send test once, just for test
 	}
 
 	@Override
@@ -40,6 +40,10 @@ class Emitter extends Spout {
 
 class Counter extends Bolt {
 	private static final long serialVersionUID = 1L;
+
+    Counter (int parallelism) {
+        setInitialParallelism(parallelism);
+    }
 
 	private Collector collector;
 	private String word;
@@ -68,19 +72,32 @@ class Counter extends Bolt {
 	public void cleanup() {
 		this.collector.emit(new Tuple(word, wordCount));
 	}
+
+    @Override
+    public Object get() { return wordCount; }
+
+    @Override
+    public void set(Object state) { this.wordCount = (Integer)state; }
 }
 
 public class WordCounter {
 	public static void main(String[] args) {
 		Config config = new Config();
 		App app = new App(config);
-		System.out.println(app.addNode("Counter", new Counter()));
-		System.out.println(app.addNode("Counter", new Counter()));
+		System.out.println(app.addNode("Counter", new Counter(1)));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		System.out.println(app.addEdge("Emitter", "Counter"));
 		System.out.println(app.addEdge("Emit", "Counter"));
 		System.out.println(app.addEdge("Emitter", "Count"));
 		System.out.println(app.addEdge("Emitter", "Counter"));
+        try {
+            Thread.sleep(10000);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println("Do splitting!!!!!!!!!!!!!!!!!!!!!!!");
+        System.out.println(app.splitNode("Emitter"));
+        System.out.println(app.splitNode("Counter"));
 	}
 }
