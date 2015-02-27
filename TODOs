@@ -1,0 +1,7 @@
+2/23/2015
+Add sub operator load monitoring.
+Send probe message and monitor the message processing latency.
+
+2/26/2015
+When splitting, all messages are blocked, the latency may be very large, how to deal with this?
+ - Suspend latency monitor when initializing and migrating.

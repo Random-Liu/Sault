@@ -74,6 +74,7 @@ class BoltWorker extends UntypedActor {
 
     private KeyWrapper key;
 	private Collector collector;
+    private ActorRef outputRouter; // Used when forwarding probe
 	private Bolt bolt;
 	private Logger logger;
     private MessageBuffer messageBuffer;
@@ -91,6 +92,7 @@ class BoltWorker extends UntypedActor {
 		this.key = key;
         logger = new Logger(Logger.Role.WORKER);
 		collector = new Collector(outputRouter, getSelf());
+        this.outputRouter = outputRouter;
 		// Use copied bolt, so that worker will not affect each other
 		try {
 			bolt = boltTemplate.clone();
@@ -118,6 +120,8 @@ class BoltWorker extends UntypedActor {
                 messageBuffer.flush(getSelf());
                 getContext().unbecome(); // Finish migrating
                 logger.info("Bolt State Set");
+            } else if (LatencyMonitor.isProbe(msg)) { // Probe should never be blocked
+                outputRouter.forward(msg, getContext());
             } else // Blocking the message in the buffer, and they will be processed after migrating.
                 messageBuffer.buffer(msg, getSender());
         }
@@ -135,6 +139,10 @@ class BoltWorker extends UntypedActor {
             Object state = bolt.get();
             getSender().tell(new State(state), getSelf()); // Transfer state to the new bolt
             getContext().stop(getSelf()); // Stop itself
+        } else if (LatencyMonitor.isProbe(msg)) { // Forward the probe to outputRouter directly
+            // In fact, if the collector is not flushed each execution, the probe should also be
+            // sent with the collector. Current now, we just forward it directly.
+            outputRouter.forward(msg, getContext());
         } else unhandled(msg);
 	}
 	
@@ -161,9 +169,7 @@ class SpoutWorker extends UntypedActor {
 		});
 	}
 
-	private enum SpoutCmd {
-		EMIT
-	}
+    private final String EMIT = "EMIT";
 
 	SpoutWorker(Spout spoutTemplate, ActorRef outputRouter) {
 		logger = new Logger(Logger.Role.WORKER);
@@ -177,17 +183,17 @@ class SpoutWorker extends UntypedActor {
 		assert spout != null;
 		spout.open(collector);
 		logger.info("Spout Started");
-		getSelf().tell(SpoutCmd.EMIT, self()); // Start emitting
+		getSelf().tell(EMIT, self()); // Start emitting
 	}
 
 	@Override
 	public void onReceive(Object msg) throws Exception {
-		if (msg instanceof  SpoutCmd) {
+		if (msg.equals(EMIT)) {
 			long Timeout = spout.nextTuple();
 			// TODO Flush every execution current now, can be optimized later.
 			collector.flush();
-			scheduler = getContext().system().scheduler().scheduleOnce(Duration.create(Timeout, TimeUnit.MILLISECONDS),
-					getSelf(), SpoutCmd.EMIT, getContext().dispatcher(), getSelf());
+			scheduler = getContext().system().scheduler().scheduleOnce(Duration.create(Timeout, TimeUnit.MICROSECONDS),
+					getSelf(), EMIT, getContext().dispatcher(), getSelf());
 		} else
 			unhandled(msg);
 	}

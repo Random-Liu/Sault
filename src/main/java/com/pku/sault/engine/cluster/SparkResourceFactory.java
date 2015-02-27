@@ -40,8 +40,10 @@ public class SparkResourceFactory {
 			// Use full name to avoid conflict with Config in API layer
 			final com.typesafe.config.Config systemConfig = ConfigFactory.parseString(""
 					+ "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
-					+ "akka.remote.netty.tcp.port = 0");
-			ActorSystem system = ActorSystem.create(ACTOR_SYSTEM_NAME+"-"+index, systemConfig);
+					+ "akka.remote.netty.tcp.port = 0\n"
+                    + "akka.stdout-loglevel = \"ERROR\"\n" // Turn off akka stdout log
+                    + "akka.loglevel = \"ERROR\"\n"); // Turn off akka log
+            ActorSystem system = ActorSystem.create(ACTOR_SYSTEM_NAME+"-"+index, systemConfig);
 			// TODO Start necessary daemon actors later
 			LinkedList<Address> nodes = new LinkedList<Address>();
 			nodes.add(system.provider().getDefaultAddress());

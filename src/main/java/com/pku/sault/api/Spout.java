@@ -12,7 +12,7 @@ public abstract class Spout implements Cloneable, Serializable {
     private int instanceNumber = 4;
 
     public abstract void open(Collector collector);
-    public abstract long nextTuple(); // Return sleep time (ms)
+    public abstract long nextTuple(); // Return sleep time (us)
     public abstract void close();
 
     public int getParallelism() {

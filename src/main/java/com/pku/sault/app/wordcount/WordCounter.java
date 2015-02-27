@@ -6,8 +6,9 @@ class Emitter extends Spout {
 	private Collector collector;
 
 	Emitter () {
-		setInstanceNumber(2);
-		setParallelism(2);
+        // TODO setInstanceNumber(16) => dead lock, why?
+		setInstanceNumber(4);
+		setParallelism(4);
 	}
 
 	@Override
@@ -17,7 +18,7 @@ class Emitter extends Spout {
 
 	@Override
 	public long nextTuple() {
-		System.out.println("Emitting");
+		//System.out.println("Emitting");
 		collector.emit(new Tuple("a", 1));
 		collector.emit(new Tuple("b", 1));
 		collector.emit(new Tuple("c", 1));
@@ -29,7 +30,22 @@ class Emitter extends Spout {
 		collector.emit(new Tuple("i", 1));
 		collector.emit(new Tuple("j", 1));
 		collector.emit(new Tuple("k", 1));
-		return 1000; // Every 1s send test once, just for test
+        collector.emit(new Tuple("l", 1));
+        collector.emit(new Tuple("m", 1));
+        collector.emit(new Tuple("n", 1));
+        collector.emit(new Tuple("o", 1));
+        collector.emit(new Tuple("p", 1));
+        collector.emit(new Tuple("q", 1));
+        collector.emit(new Tuple("r", 1));
+        collector.emit(new Tuple("s", 1));
+        collector.emit(new Tuple("t", 1));
+        collector.emit(new Tuple("w", 1));
+        collector.emit(new Tuple("v", 1));
+        collector.emit(new Tuple("u", 1));
+        collector.emit(new Tuple("x", 1));
+        collector.emit(new Tuple("y", 1));
+        collector.emit(new Tuple("z", 1));
+		return 1; // Every 1s send test once, just for test
 	}
 
 	@Override
@@ -53,7 +69,7 @@ class Counter extends Bolt {
 	@Override
 	public void prepare(Collector collector) {
 		// Current now don't need config.
-		System.out.println("Have no idea");
+		// System.out.println("Have no idea");
 		this.collector = collector;
 		this.wordCount = 0;
 	}
@@ -62,7 +78,7 @@ class Counter extends Bolt {
 	public void execute(Tuple tuple) {
 		if (word == null)
 			word = (String)tuple.getKey();
-		System.out.println(word + " " + wordCount);
+		// System.out.println(word + " " + wordCount);
 		this.wordCount += (Integer)tuple.getValue();
 		if (wordCount >= MAX_WORD_COUNT)
 			this.collector.emit(new Tuple(word, wordCount));
@@ -91,13 +107,13 @@ public class WordCounter {
 		System.out.println(app.addEdge("Emit", "Counter"));
 		System.out.println(app.addEdge("Emitter", "Count"));
 		System.out.println(app.addEdge("Emitter", "Counter"));
-        try {
-            Thread.sleep(10000);
+        /*try {
+            Thread.sleep(15000);
         } catch (Exception e) {
             e.printStackTrace();
         }
         System.out.println("Do splitting!!!!!!!!!!!!!!!!!!!!!!!");
         System.out.println(app.splitNode("Emitter"));
-        System.out.println(app.splitNode("Counter"));
+        System.out.println(app.splitNode("Counter"));*/
 	}
 }

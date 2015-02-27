@@ -72,15 +72,17 @@ class BoltSubOperator extends UntypedActor {
     private Bolt bolt;
     private ActorRef manager;
 	private ActorRef inputRouter;
+    private ActorRef latencyMonitor;
 	private ActorRef outputRouter;
 	private Logger logger;
 
 	BoltSubOperator(Bolt bolt, Map<String, RouteTree> routerTable) {
         this.bolt = bolt;
+        this.manager = getContext().parent(); // This hasn't been used.
+        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(manager, bolt));
         this.outputRouter = getContext().actorOf(OutputRouter.props(routerTable));
         this.inputRouter = getContext().actorOf(InputRouter.props(new BoltWorkerFactory(bolt,
-                outputRouter)));
-		this.manager = getContext().parent(); // This hasn't been used.
+                outputRouter), outputRouter, latencyMonitor));
 		this.logger = new Logger(Logger.Role.SUB_OPERATOR);
 
 		logger.info("Bolt Sub-Operator Started.");

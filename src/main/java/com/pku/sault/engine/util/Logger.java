@@ -16,6 +16,7 @@ public class Logger {
 
     public enum Role {
         WORKER,
+        LATENCY_MONITOR,
         INPUT_ROUTER,
         OUTPUT_ROUTER,
         SUB_OPERATOR,

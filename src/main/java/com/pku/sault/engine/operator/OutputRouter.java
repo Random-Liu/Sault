@@ -31,7 +31,6 @@ class OutputRouter extends UntypedActor {
 			for (RouteTree router : routerTable.values()) {
 				assert(router != null);
 				ActorRef target = router.route(tupleWrapper);
-				System.out.println(target);
 				target.forward(msg, getContext());
 			}
 		} else if (msg instanceof Operator.Router) { // Add/Remove router
@@ -40,7 +39,9 @@ class OutputRouter extends UntypedActor {
 				this.routerTable.remove(router.OperatorID);
 			else
 				this.routerTable.put(router.OperatorID, router.router);
-		} else unhandled(msg); // TODO Update Router
+		} else if (LatencyMonitor.isProbe(msg)) {
+            getSender().forward(msg, getContext()); // Forward this back to the latency monitor
+        } else unhandled(msg); // TODO Update Router
 	}
 }
 
