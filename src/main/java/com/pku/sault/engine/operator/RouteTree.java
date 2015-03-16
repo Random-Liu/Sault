@@ -95,7 +95,7 @@ class RouteTree implements Serializable {
 	// Set target in new sub range, return new lowerBound
 	int split(int lowerBound, ActorRef target) {
 		assert(isValidLowerBound(lowerBound));
-		assert(target != null);
+		// assert(target != null); When just insert empty cell, target == null
 
 		int upperBound = getUpperBound(lowerBound);
 		

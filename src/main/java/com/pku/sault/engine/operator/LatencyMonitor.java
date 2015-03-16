@@ -48,7 +48,7 @@ class LatencyMonitor extends UntypedActor {
 
         boolean timeout() {
             // If the queue is not full, the oldest probe must not be timeout
-            if (newestId - oldestId <= queueSize) return false;
+            if (newestId - oldestId < queueSize) return false;
             assert newestId - oldestId == queueSize;
             return !probes[id(oldestId++)];
         }
