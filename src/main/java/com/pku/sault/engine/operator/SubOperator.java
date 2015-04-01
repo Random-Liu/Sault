@@ -25,7 +25,7 @@ class SpoutSubOperator extends UntypedActor {
 		// In fact there is no input, using BroadcastPool so that we can send command
 		// to the workers in the future.
 		this.workerPool = getContext().actorOf(new BroadcastPool(spout.getInstanceNumber()).props(
-				SpoutWorker.props(spout, outputRouter)));
+				SpoutWorker.props(spout, outputRouter)/*.withDispatcher("sault-dispatcher")*/));
 		this.manager = getContext().parent();
 		this.logger = new Logger(Logger.Role.SUB_OPERATOR);
 
@@ -79,10 +79,11 @@ class BoltSubOperator extends UntypedActor {
 	BoltSubOperator(Bolt bolt, Map<String, RouteTree> routerTable) {
         this.bolt = bolt;
         this.manager = getContext().parent(); // This hasn't been used.
-        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(manager, bolt));
+		// We have moved latencyMonitor to Operator
+        // this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(manager, bolt));
         this.outputRouter = getContext().actorOf(OutputRouter.props(routerTable));
         this.inputRouter = getContext().actorOf(InputRouter.props(new BoltWorkerFactory(bolt,
-                outputRouter), outputRouter, latencyMonitor));
+                outputRouter), outputRouter));
 		this.logger = new Logger(Logger.Role.SUB_OPERATOR);
 
 		logger.info("Bolt Sub-Operator Started.");

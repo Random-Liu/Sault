@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.Map.Entry;
 
+import akka.japi.Pair;
 import akka.pattern.Patterns;
 import com.pku.sault.api.Bolt;
 import com.pku.sault.engine.cluster.ResourceManager;
@@ -17,6 +18,7 @@ import akka.japi.Creator;
 import akka.remote.RemoteScope;
 import com.pku.sault.engine.util.Constants;
 import com.pku.sault.engine.util.Logger;
+import org.apache.hadoop.yarn.webapp.hamlet.HamletSpec;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 
@@ -63,6 +65,8 @@ public class BoltOperator extends UntypedActor {
 
 	private final ResourceManager resourceManager;
 	private List<Address> resources;
+
+    private ActorRef latencyMonitor;
 
     private Logger logger;
 
@@ -140,6 +144,12 @@ public class BoltOperator extends UntypedActor {
 		}
 		assert (router != null);
 
+        // Initialize latency monitor
+        List<Pair<ActorRef, ActorRef>> targetPorts = new LinkedList<Pair<ActorRef, ActorRef>>();
+        for (Entry<ActorRef, SubOperatorInfo> subOperatorInfoEntry : subOperatorsInfo.entrySet())
+            targetPorts.add(new Pair<ActorRef, ActorRef>(subOperatorInfoEntry.getKey(), subOperatorInfoEntry.getValue().port));
+        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt));
+
 		// Register on Targets and Request Routers from Targets
 		if (targets != null) { // If targets == null, it means that there are no initial targets.
 			for (Entry<String, ActorRef> targetEntry : targets.entrySet()) {
@@ -180,6 +190,7 @@ public class BoltOperator extends UntypedActor {
 			for (ActorRef subOperator : subOperatorsInfo.keySet())
 				subOperator.forward(msg, getContext());
 		} else if (msg instanceof Split) {
+			logger.info("Start splitting");
             // Number of sub operator should never exceed max parallelism.
             assert bolt.getMaxParallelism() > subOperatorsInfo.size();
             // 1. Create new sub operator (with original operator port, range)
@@ -214,12 +225,16 @@ public class BoltOperator extends UntypedActor {
             router.setTarget(newLowerBound, newPort);
             subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(newLowerBound, newPort));
 
+            LatencyMonitor.done(latencyMonitor, getContext()); // Tell latency monitor that splitting is done.
+            // Because DONE message is sent first, the latency monitor must be in working state now.
+            LatencyMonitor.addTarget(latencyMonitor, newSubOperator, newPort, getContext()); // Start monitoring new subOperator
+
             for (ActorRef source : sources.values())
                 source.tell(new Operator.Router(id, router), getSelf()); // Update router of all sources
         } else if (msg instanceof Test) {
             doTest((Test) msg); // Only used for test
         } else unhandled(msg);
-		// TODO Dynamic merging and divide sub-operators
+		// TODO Dynamic merging sub-operators
 	}
 
     private void doTest(Test test) {

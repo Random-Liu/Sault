@@ -29,6 +29,10 @@ class RouteTree implements Serializable {
         routeMap = new TreeMap<Integer, ActorRef>();
 	}
 
+	Collection<ActorRef> getTargets() {
+		return routeMap.values();
+	}
+
     // TODO Create empty cell
     List<Integer> createEmptyCells(int number) {
         assert routeMap.isEmpty(); // Only used when initialize
@@ -95,7 +99,7 @@ class RouteTree implements Serializable {
 	// Set target in new sub range, return new lowerBound
 	int split(int lowerBound, ActorRef target) {
 		assert(isValidLowerBound(lowerBound));
-		assert(target != null);
+		// assert(target != null); Remove this assertion because the cell may be empty at first and filled later.
 
 		int upperBound = getUpperBound(lowerBound);
 		

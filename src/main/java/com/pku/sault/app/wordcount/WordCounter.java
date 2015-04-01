@@ -7,8 +7,8 @@ class Emitter extends Spout {
 
 	Emitter () {
         // TODO setInstanceNumber(16) => dead lock, why?
-		setInstanceNumber(4);
-		setParallelism(4);
+		setInstanceNumber(16);
+		setParallelism(2);
 	}
 
 	@Override
@@ -19,7 +19,7 @@ class Emitter extends Spout {
 	@Override
 	public long nextTuple() {
 		//System.out.println("Emitting");
-		collector.emit(new Tuple("a", 1));
+		collector.emit(new Tuple("a", new Tuple(System.nanoTime(), 1)));
 		collector.emit(new Tuple("b", 1));
 		collector.emit(new Tuple("c", 1));
 		collector.emit(new Tuple("d", 1));
@@ -79,9 +79,20 @@ class Counter extends Bolt {
 		if (word == null)
 			word = (String)tuple.getKey();
 		// System.out.println(word + " " + wordCount);
-		this.wordCount += (Integer)tuple.getValue();
-		if (wordCount >= MAX_WORD_COUNT)
+		Long time = null;
+		if (tuple.getValue() instanceof Tuple) {
+			time = (Long)((Tuple) tuple.getValue()).getKey();
+			this.wordCount += (Integer) ((Tuple) tuple.getValue()).getValue();
+		} else {
+			this.wordCount += (Integer) tuple.getValue();
+		}
+		if (wordCount >= MAX_WORD_COUNT) {
+			if (time != null)
+				System.out.println("=================== Latency: " + (System.nanoTime() - time)/1000 + " us");
 			this.collector.emit(new Tuple(word, wordCount));
+			System.out.println(word + " " + wordCount);
+			wordCount = 0;
+		}
 	}
 
 	@Override
@@ -100,7 +111,7 @@ public class WordCounter {
 	public static void main(String[] args) {
 		Config config = new Config();
 		App app = new App(config);
-		System.out.println(app.addNode("Counter", new Counter(1)));
+		System.out.println(app.addNode("Counter", new Counter(2)));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		System.out.println(app.addEdge("Emitter", "Counter"));

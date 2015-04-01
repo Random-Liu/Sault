@@ -22,11 +22,11 @@ class BoltWorkerFactory {
     }
 
     Props worker(KeyWrapper key) {
-        return BoltWorker.props(key, bolt, outputRouter, null);
+        return BoltWorker.props(key, bolt, outputRouter, null)/*.withDispatcher("sault-dispatcher")*/;
     }
 
     Props takeOverWorker(KeyWrapper key, ActorRef originalPort) {
-        return BoltWorker.props(key, bolt, outputRouter, originalPort);
+        return BoltWorker.props(key, bolt, outputRouter, originalPort)/*.withDispatcher("sault-dispatcher")*/;
     }
 }
 
@@ -182,7 +182,7 @@ class SpoutWorker extends UntypedActor {
 		}
 		assert spout != null;
 		spout.open(collector);
-		logger.info("Spout Started");
+        logger.info("Spout Started on " + getContext().system().name());
 		getSelf().tell(EMIT, self()); // Start emitting
 	}
 
@@ -193,7 +193,7 @@ class SpoutWorker extends UntypedActor {
 			// TODO Flush every execution current now, can be optimized later.
 			collector.flush();
 			scheduler = getContext().system().scheduler().scheduleOnce(Duration.create(Timeout, TimeUnit.MICROSECONDS),
-					getSelf(), EMIT, getContext().dispatcher(), getSelf());
+					getSelf(), EMIT, /*getContext().system().dispatchers().lookup("sault-dispatcher")*/getContext().dispatcher(), getSelf());
 		} else
 			unhandled(msg);
 	}

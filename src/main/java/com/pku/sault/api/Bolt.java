@@ -18,8 +18,7 @@ public abstract class Bolt implements Cloneable, Serializable {
 
     // Latency configuration
     private int maxLatency = 200; // 200 ms by default
-    private int reactionTime = 10; // reaction after 6 timeout probes by default
-    private int probeFrequency = 2; // 2 (probes / maxLatency) by default
+    private int reactionFactor = 10; // reaction after 6 timeout probes by default
 
     // [Caution] prepare and cleanup will also be called during migration
 	public abstract void prepare(Collector collector);
@@ -69,20 +68,12 @@ public abstract class Bolt implements Cloneable, Serializable {
         this.maxLatency = maxLatency;
     }
 
-    public int getReactionTime() {
-        return reactionTime;
+    public int getReactionFactor() {
+        return reactionFactor;
     }
 
-    protected void setReactionTime(int reactionTime) {
-        this.reactionTime = reactionTime;
-    }
-
-    public int getProbeFrequency() {
-        return probeFrequency;
-    }
-
-    protected void setProbeFrequency(int probeFrequency) {
-        this.probeFrequency = probeFrequency;
+    protected void setReactionFactor(int reactionFactor) {
+        this.reactionFactor = reactionFactor;
     }
 
     // Expose clone function

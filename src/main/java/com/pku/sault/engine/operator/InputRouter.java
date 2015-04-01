@@ -56,23 +56,20 @@ class InputRouter extends UntypedActor {
     private int upperBound;
     private ActorRef lastTarget; // Used to send probe
     private ActorRef outputRouter; // Used when lastTarget == null
-    private ActorRef latencyMonitor;
 	
-	public static Props props(final BoltWorkerFactory workerFactory, final ActorRef outputRouter,
-                              final ActorRef latencyMonitor) {
+	public static Props props(final BoltWorkerFactory workerFactory, final ActorRef outputRouter) {
 		return Props.create(new Creator<InputRouter>() {
 			private static final long serialVersionUID = 1L;
 			public InputRouter create() throws Exception {
-				return new InputRouter(workerFactory, outputRouter, latencyMonitor);
+				return new InputRouter(workerFactory, outputRouter);
 			}
 		});
 	}
 
-	InputRouter(BoltWorkerFactory workerFactory, ActorRef outputRouter, ActorRef latencyMonitor) {
+	InputRouter(BoltWorkerFactory workerFactory, ActorRef outputRouter) {
         this.logger = new Logger(Logger.Role.INPUT_ROUTER);
         this.workerFactory = workerFactory;
         this.outputRouter = outputRouter;
-        this.latencyMonitor = latencyMonitor;
 		this.routerMap = new RouterMap();
         getContext().become(INITIALIZE);
 	}
@@ -92,7 +89,6 @@ class InputRouter extends UntypedActor {
                 // If there is no need to fetch originalRouteMap, just start working
                 if (originalPort == null) {
                     operator.tell(getSelf(), getSelf()); // Report the input port to the operator
-                    LatencyMonitor.invoke(latencyMonitor, getContext()); // Invoke the latency monitor
                     getContext().unbecome();
                 } else {
                     logger.info("Start Taking Over From " + originalPort);
@@ -102,7 +98,6 @@ class InputRouter extends UntypedActor {
                 logger.info("Get Router Map From " + originalPort);
                 originalRouterMap = (RouterMap)msg;
                 operator.tell(getSelf(), getSelf());
-                LatencyMonitor.invoke(latencyMonitor, getContext()); // Invoke the latency monitor
                 getContext().unbecome();
             } else unhandled(msg); // There should never be tuple messages before the port initialized.
             // There should never be Probe either, because latency monitor is suspending.
@@ -141,9 +136,6 @@ class InputRouter extends UntypedActor {
             // Just make sure that the new sub operator is taking over the right part
             upperBound = newLowerBound - 1;
             getSender().tell(routerMap, getSelf()); // Send the original route map
-            // Latency monitor is suspending when start splitting, when taking over is done,
-            // the latency monitor should be invoked again.
-            LatencyMonitor.invoke(latencyMonitor, getContext()); // Invoke the latency monitor
             lastTarget = null; // Discard last target because of splitting
         } else if (msg instanceof BoltWorker.TakeOver) { // Forward command messages to the bolt
             // Input Router will forward command message no matter it is in bound or not.

@@ -11,10 +11,17 @@ import com.pku.sault.api.Config;
 
 class ResourceManagerActor extends UntypedActor {
 
-    private SparkResourceFactory resourceFactory;
-	
+    private ResourceFactory resourceFactory;
+
+    private final String akkaSystemConfig = ""
+            + "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
+            + "akka.remote.netty.tcp.port = 0\n"
+            /*+ "akka.stdout-loglevel = \"DEBUG\"\n" // Turn off akka stdout log
+            + "akka.loglevel = \"DEBUG\"\n"*/;
+
     ResourceManagerActor(Config config) {
-    	this.resourceFactory = new SparkResourceFactory(config);
+    	this.resourceFactory = new SparkResourceFactory();
+        this.resourceFactory.init(config, akkaSystemConfig);
     }
     
 	static Props props(final Config config) {
@@ -38,4 +45,9 @@ class ResourceManagerActor extends UntypedActor {
 			// Asynchronous call, so there is no reply here
 		} else unhandled(msg);
 	}
+
+    @Override
+    public void postStop() {
+        resourceFactory.close();
+    }
 }

@@ -21,29 +21,30 @@ import com.typesafe.config.ConfigFactory;
  * @author taotaotheripper
  *
  */
-public class SparkResourceFactory {
+class SparkResourceFactory implements ResourceFactory {
 
 	private JavaSparkContext context;
 	// TODO Only use very simple data structure current now
 	private List<Integer> resources;
-	private final int resourceOfNode;
+	private int resourceOfNode;
 	private List<Address> nodes;
-	private final int nodeNumber;
+	private int nodeNumber;
 	
 	private static class NodeStarter implements Function2<Integer, Iterator<Integer>, Iterator<Address>> {
 		private static final long serialVersionUID = 1L;
+        final String actorSystemConfig;
+
+        NodeStarter(final String actorSystemConfig) {
+            this.actorSystemConfig = actorSystemConfig;
+        }
 
 		public Iterator<Address> call(Integer index, Iterator<Integer> dummyIter)
 				throws Exception {
 			final String ACTOR_SYSTEM_NAME = "SaultWorker";
 			// TODO Set other configuration later
 			// Use full name to avoid conflict with Config in API layer
-			final com.typesafe.config.Config systemConfig = ConfigFactory.parseString(""
-					+ "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
-					+ "akka.remote.netty.tcp.port = 0\n"
-                    + "akka.stdout-loglevel = \"ERROR\"\n" // Turn off akka stdout log
-                    + "akka.loglevel = \"ERROR\"\n"); // Turn off akka log
-            ActorSystem system = ActorSystem.create(ACTOR_SYSTEM_NAME+"-"+index, systemConfig);
+			final com.typesafe.config.Config systemConfig = ConfigFactory.parseString(actorSystemConfig);
+            ActorSystem system = ActorSystem.create(ACTOR_SYSTEM_NAME + "-" + index, systemConfig);
 			// TODO Start necessary daemon actors later
 			LinkedList<Address> nodes = new LinkedList<Address>();
 			nodes.add(system.provider().getDefaultAddress());
@@ -52,24 +53,26 @@ public class SparkResourceFactory {
 	}
 	
 	// TODO Use context.addJars to deploy application
-	SparkResourceFactory(Config config) {
-		this.resourceOfNode = config.getResourceOfNode();
-		this.nodeNumber = config.getNodeNumber();
-		
-		SparkConf conf = new SparkConf().setAppName(config.getApplicationName())
-				.setMaster(config.getSparkMaster());
-		context = new JavaSparkContext(conf);
-		
-		List<Integer> dummy = new LinkedList<Integer>();
-		JavaRDD<Integer> dummyRDD = context.parallelize(dummy, this.nodeNumber);
-		this.nodes = dummyRDD.mapPartitionsWithIndex(new NodeStarter(), false).collect();
-		
-		// Use array list, because we usually need randomly access
-		this.resources = new ArrayList<Integer>();
-		for (int nodeId = 0; nodeId < nodeNumber; ++nodeId)
-			this.resources.add(resourceOfNode);
-	}
-	
+
+    @Override
+    public void init(Config saultConfig, String actorSystemConfig) {
+        this.resourceOfNode = saultConfig.getResourceOfNode();
+        this.nodeNumber = saultConfig.getNodeNumber();
+
+        SparkConf conf = new SparkConf().setAppName(saultConfig.getApplicationName())
+                .setMaster(saultConfig.getSparkMaster());
+        context = new JavaSparkContext(conf);
+
+        List<Integer> dummy = new LinkedList<Integer>();
+        JavaRDD<Integer> dummyRDD = context.parallelize(dummy, this.nodeNumber);
+        this.nodes = dummyRDD.mapPartitionsWithIndex(new NodeStarter(actorSystemConfig), false).collect();
+
+        // Use array list, because we usually need randomly access
+        this.resources = new ArrayList<Integer>();
+        for (int nodeId = 0; nodeId < nodeNumber; ++nodeId)
+            this.resources.add(resourceOfNode);
+    }
+
 	/**
 	 * Allocate one resource. If no more resources, return null.
 	 * @return
@@ -86,13 +89,14 @@ public class SparkResourceFactory {
 		resources.set(bestNode, resources.get(bestNode) - 1);
 		return nodes.get(bestNode);
 	}
-	
-	/**
+
+    /**
 	 * Allocate number resources. If no more resources, return empty list.
 	 * @param number
 	 * @return
 	 */
-	List<Address> allocateResources(int number) {
+    @Override
+	public List<Address> allocateResources(int number) {
 		List<Address> allocatedResources = new LinkedList<Address>();
 		for (int i = 0; i < number; ++i) {
 			Address resource = allocateResource();
@@ -118,23 +122,36 @@ public class SparkResourceFactory {
 	 * Release resources.
 	 * @param resources
 	 */
-	void releaseResources(List<Address> resources) {
+    @Override
+	public void releaseResources(List<Address> resources) {
 		for (Address resource : resources)
 			releaseResource(resource);
 	}
-	
-	/**
+
+    @Override
+    public void close() {
+        context.close();
+    }
+
+    /**
 	 * Test main method
 	 * @param args
 	 */
 	public static void main(String[] args) {
+        String testAkkaConfig = ""
+                + "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
+                + "akka.remote.netty.tcp.port = 0\n"
+                + "akka.stdout-loglevel = \"DEBUG\"\n" // Turn off akka stdout log
+                + "akka.loglevel = \"DEBUG\"\n";
 		Config config = new Config().setResourceOfNode(1).setNodeNumber(4);
-		SparkResourceFactory resourceFactory = new SparkResourceFactory(config);
+		SparkResourceFactory resourceFactory = new SparkResourceFactory();
+        resourceFactory.init(config, testAkkaConfig);
 		// Test allocateResource
 		for (int i = 0; i < 2; ++i)
 			System.out.println(resourceFactory.allocateResource());
 		// Test allocateResources
 		resourceFactory.releaseResources(resourceFactory.allocateResources(4));
 		System.out.println(resourceFactory.allocateResources(4));
+        resourceFactory.close();
 	}
 }
