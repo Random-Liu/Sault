@@ -64,8 +64,8 @@ class LatencyMonitor extends UntypedActor {
         }
 
         void removeTarget(ActorRef target) {
-            probes.remove(target);
             timeoutTimes.remove(target);
+            probes.remove(target);
         }
 
         void fill(Probe probe) {
