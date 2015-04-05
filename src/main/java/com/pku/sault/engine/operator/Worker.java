@@ -13,6 +13,7 @@ import java.io.Serializable;
 import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
+/*
 class BoltWorkerFactory {
     Bolt bolt;
     ActorRef outputRouter;
@@ -22,13 +23,10 @@ class BoltWorkerFactory {
     }
 
     Props worker(KeyWrapper key) {
-        return BoltWorker.props(key, bolt, outputRouter, null)/*.withDispatcher("sault-dispatcher")*/;
-    }
-
-    Props takeOverWorker(KeyWrapper key, ActorRef originalPort) {
-        return BoltWorker.props(key, bolt, outputRouter, originalPort)/*.withDispatcher("sault-dispatcher")*/;
+        return BoltWorker.props(key, bolt, outputRouter, null)/*.withDispatcher("sault-dispatcher");
     }
 }
+*/
 
 class BoltWorker extends UntypedActor {
     // Current now, Get is sent by the input router, because it knows the original port
@@ -79,16 +77,16 @@ class BoltWorker extends UntypedActor {
 	private Logger logger;
     private MessageBuffer messageBuffer;
 
-	static Props props(final KeyWrapper key, final Bolt bolt, final ActorRef outputRouter, final ActorRef originalPort) {
+	static Props props(final KeyWrapper key, final Bolt bolt, final ActorRef outputRouter/*, final ActorRef originalPort*/) {
 		return Props.create(new Creator<BoltWorker>() {
 			private static final long serialVersionUID = 1L;
 			public BoltWorker create() throws Exception {
-                return new BoltWorker(key, bolt, outputRouter, originalPort);
+                return new BoltWorker(key, bolt, outputRouter/*, originalPort*/);
 			}
 		});
 	}
 
-	BoltWorker(KeyWrapper key, Bolt boltTemplate, ActorRef outputRouter, ActorRef originalPort) {
+	BoltWorker(KeyWrapper key, Bolt boltTemplate, ActorRef outputRouter/*, ActorRef originalPort*/) {
 		this.key = key;
         logger = new Logger(Logger.Role.WORKER);
 		collector = new Collector(outputRouter, getSelf());
@@ -103,14 +101,17 @@ class BoltWorker extends UntypedActor {
         bolt.prepare(collector);
 		logger.info("Bolt Started on " + getContext().system().name());
 
+        /*
         if (originalPort != null) { // The bolt should take over original bolt
             logger.info("Bolt Start Migrating From " + originalPort);
             originalPort.tell(new TakeOver(this.key), getSelf());
             messageBuffer = new MessageBuffer();
             getContext().become(MIGRATING);
         }
+        */
 	}
 
+    /*
     private Procedure<Object> MIGRATING = new Procedure<Object>() {
         @Override
         public void apply(Object msg) {
@@ -126,6 +127,7 @@ class BoltWorker extends UntypedActor {
                 messageBuffer.buffer(msg, getSender());
         }
     };
+    */
 
 	@Override
 	public void onReceive(Object msg) throws Exception {
@@ -134,12 +136,12 @@ class BoltWorker extends UntypedActor {
             bolt.execute(((TupleWrapper) msg).getTuple());
             // TODO Flush every execution current now, can be optimized later.
             collector.flush();
-        } else if (msg instanceof TakeOver) {
+        } /*else if (msg instanceof TakeOver) {
             logger.info("Bolt Start Migrating to " + getSender());
             Object state = bolt.get();
             getSender().tell(new State(state), getSelf()); // Transfer state to the new bolt
             getContext().stop(getSelf()); // Stop itself
-        } else if (LatencyMonitor.isProbe(msg)) { // Forward the probe to outputRouter directly
+        }*/ else if (LatencyMonitor.isProbe(msg)) { // Forward the probe to outputRouter directly
             // In fact, if the collector is not flushed each execution, the probe should also be
             // sent with the collector. Current now, we just forward it directly.
             outputRouter.forward(msg, getContext());

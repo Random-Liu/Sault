@@ -47,9 +47,11 @@ public class BoltOperator extends UntypedActor {
 
     private class SubOperatorInfo {
         int lowerBound;
+        Address resource;
         ActorRef port;
-        SubOperatorInfo(int lowerBound, ActorRef port) {
+        SubOperatorInfo(int lowerBound, Address resource, ActorRef port) {
             this.lowerBound = lowerBound;
+            this.resource = resource;
             this.port = port;
         }
     }
@@ -66,6 +68,7 @@ public class BoltOperator extends UntypedActor {
 	private final ResourceManager resourceManager;
 	private List<Address> resources;
 
+    private Address latencyMonitorActorSystem;
     private ActorRef latencyMonitor;
 
     private Logger logger;
@@ -121,11 +124,10 @@ public class BoltOperator extends UntypedActor {
 		List<Future<Object>> portFutures = new LinkedList<Future<Object>>();
 
         for (int subOperatorIndex = 0; subOperatorIndex < subOperators.size(); ++subOperatorIndex) {
-            int lowerBound = lowerBounds.get(subOperatorIndex);
-            int upperBound = router.getUpperBound(lowerBound);
+            // int lowerBound = lowerBounds.get(subOperatorIndex);
+            // int upperBound = router.getUpperBound(lowerBound);
             ActorRef subOperator = subOperators.get(subOperatorIndex);
-            portFutures.add(Patterns.ask(subOperator,
-                    new BoltSubOperator.InitPort(lowerBound, upperBound), Constants.futureTimeout));
+            portFutures.add(Patterns.ask(subOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout));
         }
 		Future<Iterable<Object>> portsFuture = sequence(portFutures, getContext().dispatcher());
 		try {
@@ -134,8 +136,9 @@ public class BoltOperator extends UntypedActor {
 			for (Object portObject : portObjects) {
                 ActorRef port = (ActorRef) portObject;
                 int lowerBound = lowerBounds.get(portIndex);
+                Address resource = resources.get(portIndex);
                 subOperatorsInfo.put(subOperators.get(portIndex), new SubOperatorInfo(lowerBound,
-                        port));
+                        resource, port));
                 router.setTarget(lowerBound, port); // Fill the empty cell
                 ++portIndex;
             }
@@ -144,11 +147,15 @@ public class BoltOperator extends UntypedActor {
 		}
 		assert (router != null);
 
-        // Initialize latency monitor
+        // Initialize latency monitor in a standalone resource
         List<Pair<ActorRef, ActorRef>> targetPorts = new LinkedList<Pair<ActorRef, ActorRef>>();
         for (Entry<ActorRef, SubOperatorInfo> subOperatorInfoEntry : subOperatorsInfo.entrySet())
             targetPorts.add(new Pair<ActorRef, ActorRef>(subOperatorInfoEntry.getKey(), subOperatorInfoEntry.getValue().port));
-        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt));
+
+        // This is the only way I can come up with now.
+        this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
+        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
+                .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
 
 		// Register on Targets and Request Routers from Targets
 		if (targets != null) { // If targets == null, it means that there are no initial targets.
@@ -192,6 +199,7 @@ public class BoltOperator extends UntypedActor {
 		} else if (msg instanceof Split) {
 			logger.info("Start splitting");
             // Number of sub operator should never exceed max parallelism.
+            // TODO: Return here
             assert bolt.getMaxParallelism() > subOperatorsInfo.size();
             // 1. Create new sub operator (with original operator port, range)
             // 2. Update the input route table of the original sub operator (with new range).
@@ -205,7 +213,7 @@ public class BoltOperator extends UntypedActor {
             Split split = (Split)msg;
             ActorRef originalSubOperator = split.subOperator;
             SubOperatorInfo originalSubOperatorInfo = subOperatorsInfo.get(originalSubOperator);
-            ActorRef originalPort = originalSubOperatorInfo.port;
+            // ActorRef originalPort = originalSubOperatorInfo.port;
             int originalLowerBound = originalSubOperatorInfo.lowerBound;
 
             List<Address> nodes = resourceManager.allocateResource(1);
@@ -219,11 +227,10 @@ public class BoltOperator extends UntypedActor {
                     .withDeploy(new Deploy(new RemoteScope(node))));
             int newLowerBound = router.split(originalLowerBound, null); // Fill this cell later
             int upperBound = router.getUpperBound(newLowerBound);
-            Future<Object> newPortFuture = Patterns.ask(newSubOperator,
-                    new BoltSubOperator.InitPort(newLowerBound, upperBound, originalPort), Constants.futureTimeout);
+            Future<Object> newPortFuture = Patterns.ask(newSubOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout);
             ActorRef newPort = (ActorRef)Await.result(newPortFuture, Constants.futureTimeout.duration());
             router.setTarget(newLowerBound, newPort);
-            subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(newLowerBound, newPort));
+            subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(newLowerBound, node, newPort));
 
             LatencyMonitor.done(latencyMonitor, getContext()); // Tell latency monitor that splitting is done.
             // Because DONE message is sent first, the latency monitor must be in working state now.

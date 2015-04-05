@@ -1,12 +1,15 @@
 package com.pku.sault.engine.cluster;
 
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
+import akka.actor.ActorSystem;
 import com.pku.sault.api.Config;
 
 import com.pku.sault.engine.util.Constants;
+import com.typesafe.config.ConfigFactory;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
@@ -23,9 +26,17 @@ import akka.util.Timeout;
  * @author taotaotheripper
  *
  */
+// TODO Modify to new version of resource management
 public class ResourceManager implements Serializable {
 	private static final long serialVersionUID = 1L;
-	
+
+    private HashMap<Address, ActorSystem> localResources;
+
+    // TODO Configuable later
+    private final String akkaSystemConfig = ""
+            + "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
+            + "akka.remote.netty.tcp.port = 0\n";
+
     static class AllocateResource implements Serializable {
         private static final long serialVersionUID = 1L;
         
@@ -57,6 +68,7 @@ public class ResourceManager implements Serializable {
 	
     public ResourceManager(Config config, ActorContext context) {
     	this.resourceManagerActor = context.actorOf(ResourceManagerActor.props(config));
+        this.localResources = new HashMap<Address, ActorSystem>();
     }
     
     /**
@@ -94,5 +106,26 @@ public class ResourceManager implements Serializable {
      */
     public void releaseReource(List<Address> resources, ActorContext context) {
     	resourceManagerActor.tell(new ReleaseResource(resources), context.self());
+    }
+
+
+    /**
+     * Allocate local resource.
+     * @return Address of local resource.
+     */
+    public Address allocateLocalResource(String resourceId) {
+        ActorSystem localResource = ActorSystem.create(resourceId, ConfigFactory.parseString(akkaSystemConfig));
+        Address localResourceAddress = localResource.provider().getDefaultAddress();
+        localResources.put(localResourceAddress, localResource);
+        return localResourceAddress;
+    }
+
+    /**
+     * Release local resource.
+     * @param resourceAddress Address of local resource.
+     */
+    public void releaseLocalResource(Address resourceAddress) {
+        ActorSystem localResource = localResources.remove(resourceAddress);
+        localResource.shutdown();
     }
 }

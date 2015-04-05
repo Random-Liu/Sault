@@ -5,20 +5,30 @@ import java.io.Serializable;
 /**
  * Bolt processing tuples.
  * @author taotaotheripper
- * TODO Add Stateless Bolt later
  */
 public abstract class Bolt implements Cloneable, Serializable {
+	public static final int INFINITY_TIMEOUT = -1;
 	private static final long serialVersionUID = 1L;
+	// * If state is more important:
+	// ** Set minParallelism == maxParallelism == initialParallelism, so that the Bolt won't scaling automatically
+	// ** Set expiredTimeout == Bolt.INFINITY_TIMEOUT, so that the Bolt will run forever
+	//
+	// * If dynamic scaling is more important
+	// ** Properly configure parallelism, so that the Bolt will elastically scaling in and out.
+	// ** Set expiredTimeout == proper timeout, so that the timeout Bolt will be stopped, this is especially useful
+	// when elastically scaling.
 
     // Parallelism configuration
 	private int minParallelism = 2;
 	private int maxParallelism = 16;
 	private int initialParallelism = 4;
-	private int maxInstanceNumber = 1024; // TODO More consideration later
 
     // Latency configuration
-    private int maxLatency = 200; // 200 ms by default
+    private int maxLatency = 500; // 200 ms by default
     private int reactionFactor = 10; // reaction after 6 timeout probes by default
+
+	// Timeout configuration
+	private int expiredTimeout = 30; // 30s by default
 
     // [Caution] prepare and cleanup will also be called during migration
 	public abstract void prepare(Collector collector);
@@ -52,14 +62,6 @@ public abstract class Bolt implements Cloneable, Serializable {
 		this.initialParallelism = initialParallelism;
 	}
 
-	public int getMaxInstanceNumber() {
-		return maxInstanceNumber;
-	}
-
-	protected void setMaxInstanceNumber(int maxInstanceNumber) {
-		this.maxInstanceNumber = maxInstanceNumber;
-	}
-
     public int getMaxLatency() {
         return maxLatency;
     }
@@ -75,6 +77,14 @@ public abstract class Bolt implements Cloneable, Serializable {
     protected void setReactionFactor(int reactionFactor) {
         this.reactionFactor = reactionFactor;
     }
+
+	public int getExpiredTimeout() {
+		return expiredTimeout;
+	}
+
+	public void setExpiredTimeout(int expiredTimeout) {
+		this.expiredTimeout = expiredTimeout;
+	}
 
     // Expose clone function
 	public Bolt clone() throws CloneNotSupportedException {

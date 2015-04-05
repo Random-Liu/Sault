@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
  */
 
 class LatencyMonitor extends UntypedActor {
+    // TODO Add moving average
     private static class Target implements Serializable {
         private static final long serialVersionUID = 1L;
         final ActorRef target;
@@ -82,7 +83,7 @@ class LatencyMonitor extends UntypedActor {
                 if (!probeEntry.getValue()) {
                     int timeoutTime = timeoutTimes.get(probeEntry.getKey());
                     ++timeoutTime;
-                    System.out.println("Timeout!!!!!!!!!!!!!!!!!!TimeoutTime: " + timeoutTime);
+                    //System.out.println("Timeout!!!!!!!!!!!!!!!!!!TimeoutTime: " + timeoutTime);
                     if (timeoutTime >= reactionFactor) {
                         timeoutTargets.offer(probeEntry.getKey());
                         timeoutTimes.put(probeEntry.getKey(), 0);
@@ -200,7 +201,7 @@ class LatencyMonitor extends UntypedActor {
             probes.fill((Probe)msg);
             long now = System.nanoTime();
             // TODO Temporary log here, remove or format this later
-            logger.info("SubOperator: " + ((Probe) msg).target + " Current latency: " + (now - ((Probe) msg).now) / 1000 + "us");
+            // logger.info("SubOperator: " + ((Probe) msg).target + " Current latency: " + (now - ((Probe) msg).now) / 1000 + "us");
         } else if (msg instanceof Target) {
             Target target = (Target)msg;
             if (target.toAdd) {
