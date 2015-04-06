@@ -82,6 +82,14 @@ public class Driver extends UntypedActor {
         }
     }
 
+	public static class Merge implements Serializable {
+		private static final long serialVersionUID = 1L;
+		final String boltId;
+		public Merge(String boltId) {
+			this.boltId = boltId;
+		}
+	}
+
 	private final Config config; // TODO Pass this to operator later
 	private ResourceManager resourceManager;
 	private Map<String, ActorRef> operators;
@@ -150,6 +158,12 @@ public class Driver extends UntypedActor {
                 ActorRef operator = operators.get(split.boltId);
                 operator.tell(BoltOperator.Test.SPLIT, getSelf());
             }
-        } else unhandled(msg);
+        } else if (msg instanceof Merge) {
+			Merge merge = (Merge)msg;
+			if (operators.containsKey(merge.boltId)) {
+				ActorRef operator = operators.get(merge.boltId);
+				operator.tell(BoltOperator.Test.MERGE, getSelf());
+			}
+		} else unhandled(msg);
 	}
 }

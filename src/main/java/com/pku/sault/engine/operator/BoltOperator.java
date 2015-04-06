@@ -33,7 +33,8 @@ import static akka.dispatch.Futures.sequence;
 //TODO Consider stopping operator while framework running later
 public class BoltOperator extends UntypedActor {
     public static enum Test {
-        SPLIT
+        SPLIT,
+        MERGE
         // Add more later
     }
 
@@ -41,6 +42,14 @@ public class BoltOperator extends UntypedActor {
         private static final long serialVersionUID = 1L;
         final ActorRef subOperator;
         Split(ActorRef subOperator) {
+            this.subOperator = subOperator;
+        }
+    }
+
+    static class Merge implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final ActorRef subOperator;
+        Merge(ActorRef subOperator) {
             this.subOperator = subOperator;
         }
     }
@@ -201,15 +210,8 @@ public class BoltOperator extends UntypedActor {
             // Number of sub operator should never exceed max parallelism.
             // TODO: Return here
             assert bolt.getMaxParallelism() > subOperatorsInfo.size();
-            // 1. Create new sub operator (with original operator port, range)
-            // 2. Update the input route table of the original sub operator (with new range).
-            // After that, the original sub operator will redirect to the new sub operator all messages belong to it.
-            // 3-a. Operator update all upper stream operator's route table.
-            // 3-b. Sub operator starts new worker when message comes. It starts the new worker with port of original
-            // sub operator and the key it should process. After the worker is started, it will send an command message
-            // with the key to get the state from the original actor. During that, the worker will pending all the incoming
-            // messages in a buffer. After the state is set, it will process all the messages pending before.
-            // After all these 3 steps, the elastic scale up is done.
+            // 1. Create new sub operator.
+            // 2. Update upstream router.
             Split split = (Split)msg;
             ActorRef originalSubOperator = split.subOperator;
             SubOperatorInfo originalSubOperatorInfo = subOperatorsInfo.get(originalSubOperator);
@@ -226,32 +228,92 @@ public class BoltOperator extends UntypedActor {
             ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, targetRouters)
                     .withDeploy(new Deploy(new RemoteScope(node))));
             int newLowerBound = router.split(originalLowerBound, null); // Fill this cell later
-            int upperBound = router.getUpperBound(newLowerBound);
+            // int upperBound = router.getUpperBound(newLowerBound);
             Future<Object> newPortFuture = Patterns.ask(newSubOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout);
             ActorRef newPort = (ActorRef)Await.result(newPortFuture, Constants.futureTimeout.duration());
             router.setTarget(newLowerBound, newPort);
             subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(newLowerBound, node, newPort));
 
+            // TODO: If we split according to resource usage, we should never start a latency monitor.
             LatencyMonitor.done(latencyMonitor, getContext()); // Tell latency monitor that splitting is done.
             // Because DONE message is sent first, the latency monitor must be in working state now.
             LatencyMonitor.addTarget(latencyMonitor, newSubOperator, newPort, getContext()); // Start monitoring new subOperator
 
-            for (ActorRef source : sources.values())
-                source.tell(new Operator.Router(id, router), getSelf()); // Update router of all sources
+            updateUpstreamRouter();
+        } else if (msg instanceof Merge) {
+            logger.info("Start merging");
+            // 1. Update upstream router
+            // 2. TODO: Stop useless sub operator
+            //    Current now, don't stop it. Because it should finish processing the tuples already sent to it.
+            //    If we add ack server later, we can stop it immediately.
+            Merge merge = (Merge)msg;
+            ActorRef mergedSubOperator = merge.subOperator;
+            SubOperatorInfo mergedSubOperatorInfo = subOperatorsInfo.get(mergedSubOperator);
+            int mergedLowerBound = mergedSubOperatorInfo.lowerBound;
+
+            if (router.isSiblingAvailable(mergedLowerBound)) { // The sub operator can be merged
+                ActorRef siblingSubOperatorPort = router.sibling(mergedLowerBound);
+                ActorRef siblingSubOperator = null;
+                for (Entry<ActorRef, SubOperatorInfo> subOperatorInfoEntry : subOperatorsInfo.entrySet()) {
+                    // Just traverse current now
+                    if (subOperatorInfoEntry.getValue().port.equals(siblingSubOperatorPort)) {
+                        siblingSubOperator = subOperatorInfoEntry.getKey();
+                        break;
+                    }
+                }
+                assert (siblingSubOperator != null);
+                SubOperatorInfo siblingSubOperatorInfo = subOperatorsInfo.get(siblingSubOperator);
+                siblingSubOperatorInfo.lowerBound = router.merge(mergedLowerBound);
+                logger.info("Sub operator is merged");
+            } else { // If the sub operator can not be merged, just relocate it
+                List<Address> nodes = resourceManager.allocateResource(1); // The resource manager will ensure that the
+                // resource which will be released will not been allocated any more.
+                if (nodes.isEmpty()) { // There is no more resources, or meet an error during resource allocating
+                    logger.warn("Allocating resource error when elastic scaling.");
+                    return;
+                }
+                assert nodes.size() == 1;
+                Address node = nodes.get(0);
+                ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, targetRouters)
+                        .withDeploy(new Deploy(new RemoteScope(node))));
+                Future<Object> newPortFuture = Patterns.ask(newSubOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout);
+                ActorRef newPort = (ActorRef)Await.result(newPortFuture, Constants.futureTimeout.duration());
+                router.setTarget(mergedLowerBound, newPort);
+                subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(mergedLowerBound, node, newPort));
+                LatencyMonitor.addTarget(latencyMonitor, mergedSubOperator, newPort, getContext()); // Start monitoring new subOperator
+                logger.info("Sub operator is relocated");
+            }
+
+            // The merge request should be invoked by the resource manager
+            LatencyMonitor.removeTarget(latencyMonitor, mergedSubOperator, getContext()); // Remove merged sub-operator
+            subOperatorsInfo.remove(mergedSubOperator);
+            updateUpstreamRouter();
         } else if (msg instanceof Test) {
             doTest((Test) msg); // Only used for test
         } else unhandled(msg);
 		// TODO Dynamic merging sub-operators
 	}
 
+    private void updateUpstreamRouter() {
+        for (ActorRef source : sources.values())
+            source.tell(new Operator.Router(id, router), getSelf()); // Update router of all sources
+    }
+
     private void doTest(Test test) {
         switch (test) {
-            case SPLIT: // Test split, split the first subOperator
+            case SPLIT: { // Test split, split the first subOperator
                 assert !subOperatorsInfo.isEmpty();
                 Iterator<ActorRef> subOperatorIterator = subOperatorsInfo.keySet().iterator();
                 ActorRef subOperator = subOperatorIterator.next();
                 getSelf().tell(new Split(subOperator), getSelf());
                 break;
+            }
+            case MERGE: {
+                assert !subOperatorsInfo.isEmpty();
+                Iterator<ActorRef> subOperatorIterator = subOperatorsInfo.keySet().iterator();
+                ActorRef subOperator = subOperatorIterator.next();
+                getSelf().tell(new Merge(subOperator), getSelf());
+            }
             default: break;
         }
     }

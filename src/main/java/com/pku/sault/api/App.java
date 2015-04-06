@@ -144,4 +144,11 @@ public class App {
         driver.tell(new Driver.Split(boltId), ActorRef.noSender());
         return true;
     }
+
+	public boolean mergeNode(String boltId) {
+		if (!graph.hasNode(boltId)) return false;
+		driver.tell(new Driver.Merge(boltId), ActorRef.noSender());
+		return true;
+
+	}
 }

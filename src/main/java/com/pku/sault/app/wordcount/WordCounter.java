@@ -126,11 +126,17 @@ public class WordCounter {
 		System.out.println(app.addEdge("Emit", "Counter"));
 		System.out.println(app.addEdge("Emitter", "Count"));
 		System.out.println(app.addEdge("Emitter", "Counter"));
-        /*try {
-            Thread.sleep(15000);
+        try {
+            Thread.sleep(8000);
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+		System.out.println("Do merging!!!!!!!!!!!!!!!!!!!!!!!");
+		System.out.println(app.mergeNode("Emitter"));
+		System.out.println(app.mergeNode("Counter"));
+
+        /*
         System.out.println("Do splitting!!!!!!!!!!!!!!!!!!!!!!!");
         System.out.println(app.splitNode("Emitter"));
         System.out.println(app.splitNode("Counter"));*/
