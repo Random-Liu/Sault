@@ -43,7 +43,9 @@ class SpoutSubOperator extends UntypedActor {
 		if (msg instanceof Operator.Router) {
 			outputRouter.forward(msg, getContext());
 			logger.info("Router updated.");
-		} unhandled(msg);
+		} else if (msg instanceof SpoutOperator.Activate) { // Forward activate command to all spout
+			workerPool.forward(msg, getContext());
+		}else unhandled(msg);
 	}
 }
 
@@ -87,6 +89,6 @@ class BoltSubOperator extends UntypedActor {
 			getSender().tell(inputRouter, getSelf());
             // inputRouter.forward(msg, getContext());
             // The input router will notify the sender after initialized
-		} unhandled(msg);
+		}  else unhandled(msg);
 	}
 }

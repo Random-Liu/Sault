@@ -5,57 +5,56 @@ import com.pku.sault.api.*;
 class Emitter extends Spout {
 	private Collector collector;
 	//int x = 0;
+	private long now;
 
 	Emitter () {
 		// TODO setInstanceNumber(16) => dead lock, why?
-		setInstanceNumber(16);
-		setParallelism(2);
+		setInstanceNumber(8);
+		setParallelism(16);
 	}
 
 	@Override
 	public void open(Collector collector) {
 		this.collector = collector;
+		now = System.currentTimeMillis();
 	}
 
 	@Override
 	public long nextTuple() {
 		//System.out.println("Emitting");
-		collector.emit(new Tuple("a", new Tuple(System.nanoTime(), 1)));
-		collector.emit(new Tuple("b", 1));
-		collector.emit(new Tuple("c", 1));
-		collector.emit(new Tuple("d", 1));
-		collector.emit(new Tuple("e", 1));
-		collector.emit(new Tuple("f", 1));
-		collector.emit(new Tuple("g", 1));
-		collector.emit(new Tuple("h", 1));
-		collector.emit(new Tuple("i", 1));
-		collector.emit(new Tuple("j", 1));
-		collector.emit(new Tuple("k", 1));
-		collector.emit(new Tuple("l", 1));
-		collector.emit(new Tuple("m", 1));
-		//if (x >= 100)
+		for (int i = 0; i < 6; ++i) {
+			collector.emit(new Tuple(""
+					+ (char) (Math.random() * 26 + 'a')
+					+ (char) (Math.random() * 26 + 'a')
+					+ (char) (Math.random() * 26 + 'a')
+					, new Tuple(System.currentTimeMillis(), 1)));
+		}
+		long newNow = System.currentTimeMillis();
+		if (newNow - now < 10000)
+			return 50000L; //2s
+		//else if (newNow - now < 20000)
 		//	return 20000;
-		collector.emit(new Tuple("n", 1));
-		collector.emit(new Tuple("o", 1));
-		collector.emit(new Tuple("p", 1));
-		collector.emit(new Tuple("q", 1));
-		collector.emit(new Tuple("r", 1));
-		collector.emit(new Tuple("s", 1));
-		collector.emit(new Tuple("t", 1));
-		collector.emit(new Tuple("w", 1));
-		collector.emit(new Tuple("v", 1));
-		collector.emit(new Tuple("u", 1));
-		collector.emit(new Tuple("x", 1));
-		collector.emit(new Tuple("y", 1));
-		collector.emit(new Tuple("z", 1));
+		//else //if (newNow - now < 30000)
+		else	return 1000;
+		//else
+			//return 1000;
 		//++x;
 		//return 60000000;
-		return 20000; // Every 1s send test once, just for test
+		//return 20000; // Every 1s send test once, just for test
 	}
 
 	@Override
 	public void close() {
 		// Do nothing now
+	}
+
+	@Override
+	public void activate() {
+	}
+
+	@Override
+	public void deactivate() {
+
 	}
 }
 
@@ -63,6 +62,7 @@ class Counter extends Bolt {
 	private static final long serialVersionUID = 1L;
 
 	Counter (int parallelism) {
+		setReactionFactor(20);
 		setInitialParallelism(parallelism);
 		setMaxLatency(100);
 	}
@@ -71,7 +71,9 @@ class Counter extends Bolt {
 	private String word;
 	private int wordCount;
 	private final int MAX_WORD_COUNT = 1000;
-	private Long averageTime = 0L;
+	private long averageTime = 0L;
+	private long now;
+	private long sample_interval = 2000;
 
 	@Override
 	public void prepare(Collector collector) {
@@ -79,6 +81,7 @@ class Counter extends Bolt {
 		// System.out.println("Have no idea");
 		this.collector = collector;
 		this.wordCount = 0;
+		this.now = System.currentTimeMillis();
 	}
 
 	@Override
@@ -86,19 +89,16 @@ class Counter extends Bolt {
 		if (word == null)
 			word = (String)tuple.getKey();
 		// System.out.println(word + " " + wordCount);
-		if (word.equals("a")) {
-			averageTime += (System.nanoTime() - (Long)((Tuple) tuple.getValue()).getKey());
-			this.wordCount += (Integer) ((Tuple) tuple.getValue()).getValue();
-		} else {
-			this.wordCount += (Integer) tuple.getValue();
-		}
-		if (wordCount >= MAX_WORD_COUNT) {
-			if (word.equals("a")) {
-				System.out.println("=================== Latency: " + averageTime / wordCount / 1000 + " us");
-				averageTime = 0L;
-			}
+		averageTime += System.currentTimeMillis() - (Long)((Tuple) tuple.getValue()).getKey();
+		wordCount += (Integer) ((Tuple) tuple.getValue()).getValue();
+		//if (wordCount >= MAX_WORD_COUNT) {
+		long newNow = System.currentTimeMillis();
+		if (newNow - now >= sample_interval) {
+			now = newNow;
+			System.out.println(word + " " + (double)averageTime / wordCount + "");
+			averageTime = 0L;
 			this.collector.emit(new Tuple(word, wordCount));
-			System.out.println(word + " " + wordCount);
+			// System.out.println(word + " " + wordCount);
 			wordCount = 0;
 		}
 	}
@@ -122,10 +122,18 @@ public class WordCounter {
 		System.out.println(app.addNode("Counter", new Counter(2)));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		System.out.println(app.addNode("Emitter", new Emitter()));
+		// app.deactivate();
 		System.out.println(app.addEdge("Emitter", "Counter"));
 		System.out.println(app.addEdge("Emit", "Counter"));
 		System.out.println(app.addEdge("Emitter", "Count"));
 		System.out.println(app.addEdge("Emitter", "Counter"));
+		/*try {
+			Thread.sleep(5000);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}*/
+		// app.activate();
+		/*
         try {
             Thread.sleep(8000);
         } catch (Exception e) {
@@ -136,7 +144,6 @@ public class WordCounter {
 		System.out.println(app.mergeNode("Emitter"));
 		System.out.println(app.mergeNode("Counter"));
 
-        /*
         System.out.println("Do splitting!!!!!!!!!!!!!!!!!!!!!!!");
         System.out.println(app.splitNode("Emitter"));
         System.out.println(app.splitNode("Counter"));*/

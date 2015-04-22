@@ -70,6 +70,14 @@ public class App {
 			target.sources.remove(sourceId);
 			return true;
 		}
+		Iterator<String> getSources() {
+			LinkedList<String> sources = new LinkedList<String>();
+			for (Map.Entry<String, Node> nodeEntry : graph.entrySet()) {
+				if (nodeEntry.getValue().isSource())
+					sources.add(nodeEntry.getKey());
+			}
+			return sources.iterator();
+		}
 	}
 
 	private final static String DRIVER_SYSTEM_NAME = "SaultDriver";
@@ -149,6 +157,23 @@ public class App {
 		if (!graph.hasNode(boltId)) return false;
 		driver.tell(new Driver.Merge(boltId), ActorRef.noSender());
 		return true;
-
 	}
+
+
+	public void activate() {
+		Iterator<String> sources = graph.getSources();
+		while (sources.hasNext()){
+			String source = sources.next();
+			driver.tell(new Driver.Activate(source, true), ActorRef.noSender());
+		}
+	}
+
+	public void deactivate() {
+		Iterator<String> sources = graph.getSources();
+		while (sources.hasNext()){
+			String source = sources.next();
+			driver.tell(new Driver.Activate(source, false), ActorRef.noSender());
+		}
+	}
+
 }

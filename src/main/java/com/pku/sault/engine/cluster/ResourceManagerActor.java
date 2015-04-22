@@ -16,8 +16,22 @@ class ResourceManagerActor extends UntypedActor {
     private final String akkaSystemConfig = ""
             + "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
             + "akka.remote.netty.tcp.port = 0\n"
+			+ "akka.remote.netty.tcp.tcp-nodelay = off\n"
+			// In fact, this is not really a solution
+			// This can be only temp used, a better way may be use zeromq instead.
+			+ "akka.actor.remote.transport-failure-detector.acceptable-heartbeat-pause = 1000s\n"
+			+ "akka.actor.remote.watch-failure-detector.acceptable-heartbeat-pause = 1000s\n"
+			// + "akka.actor.default-remote-dispatcher.throughput = 100000"
+			// + "akka.actor.remote.use-passive-connections = off"
+			// + "akka.actor.remote.default-remote-dispatcher.fork-join-executor.parallelism-min = 2\n"
+			// + "akka.actor.remote.default-remote-dispatcher.fork-join-executor.parallelism-max = 2\n"
+			// + "akka.actor.remote.system-message-buffer-size = "
             /*+ "akka.stdout-loglevel = \"DEBUG\"\n" // Turn off akka stdout log
             + "akka.loglevel = \"DEBUG\"\n"*/;
+			//+ "akka.actor.remote.netty.tcp.client-socket-worker-pool.pool-size-min = 8\n"
+			//+ "akka.actor.remote.netty.tcp.client-socket-worker-pool.pool-size-max = 8\n"
+			//+ "akka.actor.remote.netty.tcp.server-socket-worker-pool.pool-size-min = 8\n"
+			//+ "akka.actor.remote.netty.tcp.server-socket-worker-pool.pool-size-max = 8\n";
 
     ResourceManagerActor(Config config) {
     	this.resourceFactory = new SparkResourceFactory();

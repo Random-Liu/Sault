@@ -83,7 +83,7 @@ class LatencyMonitor extends UntypedActor {
                 if (!probeEntry.getValue()) {
                     int timeoutTime = timeoutTimes.get(probeEntry.getKey());
                     ++timeoutTime;
-                    //System.out.println("Timeout!!!!!!!!!!!!!!!!!!TimeoutTime: " + timeoutTime);
+                    System.out.println("Timeout!!!!!!!!!!!!!!!!!!TimeoutTime: " + timeoutTime);
                     if (timeoutTime >= reactionFactor) {
                         timeoutTargets.offer(probeEntry.getKey());
                         timeoutTimes.put(probeEntry.getKey(), 0);
@@ -153,7 +153,7 @@ class LatencyMonitor extends UntypedActor {
 
         probes = new Probes(targets);
 
-        timer = getContext().system().scheduler().schedule(Duration.Zero(),
+        timer = getContext().system().scheduler().schedule(Duration.create(5, TimeUnit.SECONDS)/*.Zero()*/,
                 Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), Msg.TICK,
                 getContext().dispatcher(), getSelf());
 
@@ -173,7 +173,8 @@ class LatencyMonitor extends UntypedActor {
                     getContext().unbecome();
                     logger.info("Latency Monitor Start Monitoring");
                     // Start timer again
-                    timer = getContext().system().scheduler().schedule(Duration.Zero(),
+                    // TODO Just test here
+                    timer = getContext().system().scheduler().schedule(Duration.create(500, TimeUnit.MILLISECONDS)/*.Zero()*/,
                             Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), Msg.TICK,
                             getContext().dispatcher(), getSelf());
                 }

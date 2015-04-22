@@ -73,6 +73,16 @@ public class Driver extends UntypedActor {
 		}
 	}
 
+	public static class Activate implements Serializable {
+		private static final long serialVersionUID = 1L;
+		final String spoutId;
+		final boolean toActivate;
+		public Activate(String spoutId, boolean toActivate) {
+			this.spoutId = spoutId;
+			this.toActivate = toActivate;
+		}
+	}
+
     // Current now only used for test
     public static class Split implements Serializable {
         private static final long serialVersionUID = 1L;
@@ -151,6 +161,12 @@ public class Driver extends UntypedActor {
 					logger.error("The edge between invalid nodes: " + edge.sourceId + "-" + edge.targetId);
 			} else { // Remove edge
 				// TODO Can't directly remove, deal with this later
+			}
+		} else if (msg instanceof Activate) { // Activate and deactivate
+			Activate activate = (Activate)msg;
+			if (operators.containsKey(activate.spoutId)) {
+				ActorRef operator = operators.get(activate.spoutId);
+				operator.tell(new SpoutOperator.Activate(activate.toActivate), getSelf());
 			}
 		} else if (msg instanceof Split) { // Only used for test
             Split split = (Split)msg;

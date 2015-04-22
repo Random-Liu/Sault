@@ -191,13 +191,29 @@ class SpoutWorker extends UntypedActor {
 	@Override
 	public void onReceive(Object msg) throws Exception {
 		if (msg.equals(EMIT)) {
-			long Timeout = spout.nextTuple();
-			// TODO Flush every execution current now, can be optimized later.
-			collector.flush();
+			long Timeout;
+            do {
+                Timeout = spout.nextTuple();
+                collector.flush(); // TODO Flush every execution current now, can be optimized later.
+            } while (Timeout  == 0L);
 			scheduler = getContext().system().scheduler().scheduleOnce(Duration.create(Timeout, TimeUnit.MICROSECONDS),
 					getSelf(), EMIT, /*getContext().system().dispatchers().lookup("sault-dispatcher")*/getContext().dispatcher(), getSelf());
-		} else
-			unhandled(msg);
+		} else if (msg instanceof SpoutOperator.Activate) {
+            SpoutOperator.Activate activate = (SpoutOperator.Activate)msg;
+            if (activate.toActivate) { // activate spout
+                if (scheduler == null || scheduler.isCancelled()) { // Just in case of duplicated command
+                    spout.activate(); // Call activate function
+                    getSelf().tell(EMIT, self()); // Start emitting
+                    logger.info("Spout activated on " + getContext().system().name());
+                }
+            } else { // deactivate spout
+                if (scheduler != null && !scheduler.isCancelled()) { // Just in case of duplicated command
+                    spout.deactivate(); // Call deactivate function
+                    scheduler.cancel();
+                    logger.info("Spout deactivated on " + getContext().system().name());
+                }
+            }
+        } else unhandled(msg);
 	}
 
 	@Override

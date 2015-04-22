@@ -108,7 +108,6 @@ public class BoltOperator extends UntypedActor {
         this.subOperatorsInfo = new HashMap<ActorRef, SubOperatorInfo>();
         this.logger = new Logger(Logger.Role.SUB_OPERATOR);
 
-
 		// The operator can only process message after initialized, so the following operations are blocking!
 		// Request initial resource
 		// [Caution] Block here!
@@ -162,9 +161,9 @@ public class BoltOperator extends UntypedActor {
             targetPorts.add(new Pair<ActorRef, ActorRef>(subOperatorInfoEntry.getKey(), subOperatorInfoEntry.getValue().port));
 
         // This is the only way I can come up with now.
-        this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
-        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
-                .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
+        //this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
+        //this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
+        //     .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
 
 		// Register on Targets and Request Routers from Targets
 		if (targets != null) { // If targets == null, it means that there are no initial targets.

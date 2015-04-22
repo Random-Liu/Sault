@@ -10,6 +10,7 @@ import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
 import com.pku.sault.api.Bolt;
+import com.pku.sault.api.Tuple;
 import com.pku.sault.engine.util.Logger;
 import scala.concurrent.duration.Duration;
 
@@ -105,10 +106,16 @@ class InputRouter extends UntypedActor {
 	public void onReceive(Object msg) throws Exception {
 		if (msg instanceof TupleWrapper) {
             TupleWrapper tupleWrapper = (TupleWrapper) msg;
+            // track(tupleWrapper); // Just for test
             ActorRef target = routerMap.route(tupleWrapper.getKey());
             if (target == null) {
+                // long before = System.nanoTime();
                 target = getContext().actorOf(BoltWorker.props(tupleWrapper.getKey(), bolt, outputRouter));
+                // long mid = System.nanoTime();
                 routerMap.setTarget(tupleWrapper.getKey(), target);
+                // long end = System.nanoTime();
+                // System.out.println("Create actor: " + (double)(mid - before) / 1000000 + " ms");
+                // System.out.println("Insert actor: " + (double)(end - mid) / 1000000 + " ms");
             }
             target.forward(msg, getContext());
             lastTarget = target; // Set last target here
@@ -116,8 +123,9 @@ class InputRouter extends UntypedActor {
             forwardProbe(msg);
         } else if (msg.equals(TIMEOUT_TICK)) { // Stop expired targets
             List<ActorRef> expiredTargets = routerMap.getExpiredTargets();
-            for (ActorRef expiredTarget : expiredTargets)
+            for (ActorRef expiredTarget : expiredTargets) {
                 getContext().stop(expiredTarget);
+            }
         } else unhandled(msg);
 	}
 
@@ -136,4 +144,18 @@ class InputRouter extends UntypedActor {
         timer.cancel();
     }
 
+    /*
+    // Just for test
+    long averageTime = 0;
+    long count = 0;
+    private void track(TupleWrapper tuple) {
+        averageTime += System.currentTimeMillis() - (Long)((Tuple)(tuple.getTuple().getValue())).getKey();
+        ++count;
+        if (count >= 10000) {
+            System.out.println("Output to Input Latency: " + (double) averageTime / count + " ms");
+            averageTime = 0L;
+            count = 0;
+        }
+    }
+    */
 }

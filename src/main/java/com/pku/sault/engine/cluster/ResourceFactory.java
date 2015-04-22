@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Created by lantaoli on 2015/3/28.
  */
-interface ResourceFactory {
+public interface ResourceFactory {
     /**
      * Initialize the resource factory.
      * @param saultConfig Sault Configuration.

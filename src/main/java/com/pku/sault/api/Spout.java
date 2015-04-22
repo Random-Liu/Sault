@@ -14,6 +14,8 @@ public abstract class Spout implements Cloneable, Serializable {
     public abstract void open(Collector collector);
     public abstract long nextTuple(); // Return sleep time (us)
     public abstract void close();
+    public abstract void activate();
+    public abstract void deactivate();
 
     public int getParallelism() {
         return parallelism;

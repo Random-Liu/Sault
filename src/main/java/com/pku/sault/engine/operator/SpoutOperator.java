@@ -1,5 +1,6 @@
 package com.pku.sault.engine.operator;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -22,6 +23,15 @@ import akka.remote.RemoteScope;
  * @author taotaotheripper
  */
 public class SpoutOperator extends UntypedActor {
+
+    // Activate or deactivate spout
+    public static class Activate implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final boolean toActivate;
+        public Activate(boolean toActivate) {
+            this.toActivate = toActivate;
+        }
+    }
 
     private Spout spout;
     private final String id;
@@ -100,6 +110,9 @@ public class SpoutOperator extends UntypedActor {
             assert(targets.containsKey(targetRouter.OperatorID)); // target should have been inserted
             targetRouters.put(targetRouter.OperatorID, targetRouter.router);
             // Broadcast new router to all sub operators
+            for (ActorRef subOperator : subOperators)
+                subOperator.forward(msg, getContext());
+        } else if (msg instanceof Activate) { // Activate or deactivate spout
             for (ActorRef subOperator : subOperators)
                 subOperator.forward(msg, getContext());
         } else unhandled(msg);

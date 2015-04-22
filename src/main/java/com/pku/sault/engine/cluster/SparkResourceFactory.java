@@ -59,8 +59,8 @@ class SparkResourceFactory implements ResourceFactory {
         this.resourceOfNode = saultConfig.getResourceOfNode();
         this.nodeNumber = saultConfig.getNodeNumber();
 
-        SparkConf conf = new SparkConf().setAppName(saultConfig.getApplicationName())
-                .setMaster(saultConfig.getSparkMaster());
+        SparkConf conf = new SparkConf().setAppName(saultConfig.getApplicationName());
+                //.setMaster(saultConfig.getSparkMaster());
         context = new JavaSparkContext(conf);
 
         List<Integer> dummy = new LinkedList<Integer>();
@@ -71,6 +71,15 @@ class SparkResourceFactory implements ResourceFactory {
         this.resources = new ArrayList<Integer>();
         for (int nodeId = 0; nodeId < nodeNumber; ++nodeId)
             this.resources.add(resourceOfNode);
+
+		// This is only a temp method to let the task done slower,
+		// so that Spark will distribute tasks, or else spark will
+		// complete all the tasks on only a few hosts
+		/*try {
+			Thread.sleep(5000);
+		} catch (Exception e) {
+
+		}*/
     }
 
 	/**
@@ -79,6 +88,7 @@ class SparkResourceFactory implements ResourceFactory {
 	 */
 	// If there is no more resources, return null
 	Address allocateResource() {
+		/*
 		int bestNode = 0;
 		for (int nodeId = 0; nodeId < nodeNumber; ++nodeId) {
 			if (resources.get(bestNode) < resources.get(nodeId))
@@ -87,7 +97,9 @@ class SparkResourceFactory implements ResourceFactory {
 		// If there is no more resources
 		if (resources.get(bestNode) == 0) return null;
 		resources.set(bestNode, resources.get(bestNode) - 1);
-		return nodes.get(bestNode);
+		*/
+		return nodes.get((int)(Math.random()*nodes.size()));
+		// return nodes.get(bestNode);
 	}
 
     /**

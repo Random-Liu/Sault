@@ -35,7 +35,10 @@ public class ResourceManager implements Serializable {
     // TODO Configuable later
     private final String akkaSystemConfig = ""
             + "akka.actor.provider = \"akka.remote.RemoteActorRefProvider\"\n"
-            + "akka.remote.netty.tcp.port = 0\n";
+            + "akka.remote.netty.tcp.port = 0\n"
+            // + "akka.remote.netty.tcp.tcp-nodelay = off\n"
+            + "akka.actor.remote.transport-failure-detector.acceptable-heartbeat-pause = 1000s\n"
+            + "akka.actor.remote.watch-failure-detector.acceptable-heartbeat-pause = 1000s\n";
 
     static class AllocateResource implements Serializable {
         private static final long serialVersionUID = 1L;
