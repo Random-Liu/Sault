@@ -1,20 +1,20 @@
 package com.pku.sault.engine.operator;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 
-import akka.actor.ActorRef;
-import akka.actor.Props;
-import akka.actor.UntypedActor;
+import akka.actor.*;
 import akka.japi.Creator;
 
-import com.pku.sault.api.Tuple; // Just for test
+import com.pku.sault.engine.util.Constants;
+import com.pku.sault.engine.util.Logger;
+import scala.concurrent.duration.Duration;
 
 class OutputRouter extends UntypedActor {
+
 	Map<String, RouteTree> routerTable;
-	Map<String, HashMap<ActorRef, LinkedList<TupleWrapper>>> messageBuffer;
-	
+	Map<String, HashMap<ActorRef, ActorRef>> bufferActors;
+
 	public static Props props(final Map<String, RouteTree> routerTable) {
 		return Props.create(new Creator<OutputRouter>() {
 			private static final long serialVersionUID = 1L;
@@ -26,6 +26,9 @@ class OutputRouter extends UntypedActor {
 	
 	OutputRouter(Map<String, RouteTree> routerTable) {
 		this.routerTable = routerTable;
+		this.bufferActors = new HashMap<String, HashMap<ActorRef, ActorRef>>();
+		for (String routerId : routerTable.keySet())
+			bufferActors.put(routerId, new HashMap<ActorRef, ActorRef>());
 	}
 	
 	@Override
@@ -33,18 +36,36 @@ class OutputRouter extends UntypedActor {
 		// Update routerTable later
 		if (msg instanceof TupleWrapper) {
 			TupleWrapper tupleWrapper = (TupleWrapper)msg;
-			for (RouteTree router : routerTable.values()) {
+			for (Map.Entry<String, RouteTree> routerEntry : routerTable.entrySet()) {
+				String routerId = routerEntry.getKey();
+				RouteTree router = routerEntry.getValue();
 				assert(router != null);
 				// track(tupleWrapper); // Just for test
 				ActorRef target = router.route(tupleWrapper);
-				target.forward(msg, getContext());
+				Map<ActorRef, ActorRef> targetToBufferActor = bufferActors.get(routerId);
+				ActorRef bufferActor = targetToBufferActor.get(target);
+				if (bufferActor == null) {
+					bufferActor = getContext().actorOf(BufferActor.props(target));
+					targetToBufferActor.put(target, bufferActor);
+				}
+				bufferActor.forward(msg, getContext()); // Forward to buffer actor*/
+				// target.forward(msg, getContext());
 			}
 		} else if (msg instanceof Operator.Router) { // Add/Remove router
 			Operator.Router router = (Operator.Router)msg;
-			if (router.router == null)
+			if (router.router == null) {
 				this.routerTable.remove(router.OperatorID);
-			else
+				// Flush all the messages and stop buffer actor
+				Map<ActorRef, ActorRef> targetToBufferActor = bufferActors.get(router.OperatorID);
+				for (ActorRef bufferActor : targetToBufferActor.values())
+					getContext().stop(bufferActor);
+				// Remove target to bufferActor map
+				this.bufferActors.remove(router.OperatorID);
+			} else {
 				this.routerTable.put(router.OperatorID, router.router);
+				// Create target to bufferActor map
+				this.bufferActors.put(router.OperatorID, new HashMap<ActorRef, ActorRef>());
+			}
 		} else if (LatencyMonitor.isProbe(msg)) {
             getSender().forward(msg, getContext()); // Forward this back to the latency monitor
         } else unhandled(msg); // TODO Update Router
@@ -66,3 +87,95 @@ class OutputRouter extends UntypedActor {
 	*/
 }
 
+class BufferActor extends UntypedActor {
+	static final int FLUSH = 0;
+	static final long flushInterval = 2000000L; // 2 ms
+
+	private final ActorRef target;
+	private Queue<TupleWrapper> buffer;
+	private long lastMsgTime = 0;
+	private boolean isBuffering;
+	private Cancellable timer;
+	private Logger logger;
+
+	/* For test */
+	private boolean testing = false;
+	private int blockNumber = 0;
+	private int messageNumber = 0;
+	private long lastTimeStamp = 0;
+	private long reportInterval = 2; // 2s
+	private Cancellable reportTimer;
+	private static int REPORT = 1;
+
+
+	public static Props props(final ActorRef target) {
+		return Props.create(new Creator<BufferActor>() {
+			private static final long serialVersionUID = 1L;
+			public BufferActor create() throws Exception {
+				return new BufferActor(target);
+			}
+		});
+	}
+
+	BufferActor(ActorRef target) {
+		this.target = target;
+		buffer = new LinkedList<TupleWrapper>();
+		isBuffering = false; // Don't buffer at first
+		logger = new Logger(Logger.Role.OUTPUT_ROUTER);
+
+		if (testing) {
+			// Enable this only when testing.
+			this.reportTimer =
+					timer = getContext().system().scheduler().schedule(Duration.Zero(),
+							Duration.create(reportInterval, TimeUnit.SECONDS), getSelf(), REPORT,
+							getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
+			lastTimeStamp = System.currentTimeMillis();
+		}
+	}
+
+	@Override
+	public void onReceive(Object msg) throws Exception {
+		if (msg instanceof TupleWrapper) {
+			long now = System.nanoTime(); //ns
+			if (!isBuffering && now - lastMsgTime > flushInterval) {
+				// System.out.println("Send directly!!!!!!!!!!!!!!!");
+				// TODO If sender is useful, modify sender later, current now use output router as sender
+				target.tell(msg, getContext().parent());
+				++messageNumber;
+				++blockNumber;
+			} else {
+				if (!isBuffering) {
+					timer = getContext().system().scheduler().scheduleOnce(Duration.create(flushInterval, TimeUnit.NANOSECONDS),
+							getSelf(), FLUSH, getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
+					isBuffering = true;
+				}
+				buffer.offer((TupleWrapper) msg);
+			}
+			lastMsgTime = now;
+		} else if (msg.equals(FLUSH)) {
+			TupleWrapperBlock block = new TupleWrapperBlock(buffer);
+			// System.out.println("Flushed " + buffer.size() + "messages in one block");
+			target.tell(block, getContext().parent());
+			messageNumber += buffer.size();
+			++blockNumber;
+			// Create new buffer, should not clear here, because the buffer is sent in block
+			buffer = new LinkedList<TupleWrapper>();
+			isBuffering = false;
+		} else if (msg.equals(REPORT)) {
+			long newTimeStamp = System.currentTimeMillis();
+			logger.info("Send " + messageNumber + " messages in " + blockNumber + " blocks to " + target.path()
+					+ " in " + ((double)(newTimeStamp - lastTimeStamp)/1000) + " s");
+			lastTimeStamp = newTimeStamp;
+			blockNumber = 0;
+			messageNumber = 0;
+		} else unhandled(msg);
+	}
+
+	@Override
+	public void postStop() {
+		TupleWrapperBlock block = new TupleWrapperBlock(buffer);
+		target.tell(block, getContext().parent());
+		if (!timer.isCancelled()) timer.cancel();
+		if (reportTimer != null && !reportTimer.isCancelled()) reportTimer.cancel();
+	}
+}

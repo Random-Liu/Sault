@@ -5,6 +5,7 @@ import akka.japi.Creator;
 import akka.japi.Pair;
 import akka.japi.Procedure;
 import com.pku.sault.api.Bolt;
+import com.pku.sault.engine.util.Constants;
 import com.pku.sault.engine.util.Logger;
 import scala.concurrent.duration.Duration;
 
@@ -30,6 +31,14 @@ class LatencyMonitor extends UntypedActor {
         }
     }
 
+    private static class AdaptOver implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final ActorRef target;
+        AdaptOver(ActorRef target) {
+            this.target = target;
+        }
+    }
+
     private static class Probe implements Serializable {
         private static final long serialVersionUID = 1L;
         final ActorRef target;
@@ -50,6 +59,11 @@ class LatencyMonitor extends UntypedActor {
         private HashMap<ActorRef, Boolean> probes;
         private HashMap<ActorRef, Integer> timeoutTimes;
         int currentId;
+        Probes() {
+            probes = new HashMap<ActorRef, Boolean>();
+            timeoutTimes = new HashMap<ActorRef, Integer>();
+        }
+
         Probes(List<ActorRef> targets) {
             probes = new HashMap<ActorRef, Boolean>();
             for (ActorRef target : targets)
@@ -102,15 +116,24 @@ class LatencyMonitor extends UntypedActor {
         }
     }
 
+    private class TargetInfo {
+        ActorRef port;
+        boolean adaptOver;
+        TargetInfo(ActorRef port) {
+            this.port = port;
+            adaptOver = false;
+        }
+    }
     private Probes probes;
-    private List<Pair<ActorRef, ActorRef>> targetPorts;
+    private Map<ActorRef, TargetInfo> targetsInfo;
     private Queue<ActorRef> timeoutTargets = new LinkedList<ActorRef>();
 
-    private enum Msg {
-        DONE,
-        TICK
-    }
+    static private final int TICK = 0;
+    static private final int DONE = 1;
+
     private Cancellable timer;
+    private final long startAdaptiveTime;
+    private final long splitAdaptiveTime;
 
     private Logger logger;
 
@@ -132,7 +155,7 @@ class LatencyMonitor extends UntypedActor {
     }
 
     static void done(ActorRef latencyMonitor, ActorContext context) {
-        latencyMonitor.tell(Msg.DONE, context.self());
+        latencyMonitor.tell(DONE, context.self());
     }
 
     static boolean isProbe(Object msg) {
@@ -145,16 +168,27 @@ class LatencyMonitor extends UntypedActor {
 
         probePeriod = bolt.getMaxLatency();
         reactionFactor = bolt.getReactionFactor();
+        startAdaptiveTime = bolt.getStartAdaptiveTime();
+        splitAdaptiveTime = bolt.getSplitAdaptiveTime();
 
-        List<ActorRef> targets = new LinkedList<ActorRef>();
-        this.targetPorts = targetPorts;
-        for (Pair<ActorRef, ActorRef> targetPort : targetPorts)
-            targets.add(targetPort.first());
+        // List<ActorRef> targets = new LinkedList<ActorRef>();
+        targetsInfo = new HashMap<ActorRef, TargetInfo>();
+        for (Pair<ActorRef, ActorRef> targetPort : targetPorts) {
+            ActorRef target = targetPort.first();
+            ActorRef port = targetPort.second();
+            logger.debug("Add target " + target);
+            targetsInfo.put(target, new TargetInfo(port));
+            // targets.add(targetPort.first());
+            getContext().system().scheduler().scheduleOnce(Duration.create(startAdaptiveTime, TimeUnit.SECONDS),
+                    getSelf(), new AdaptOver(target),
+                    getContext().dispatcher(), getSelf());
+        }
 
-        probes = new Probes(targets);
+        //probes = new Probes(targets);
+        probes = new Probes();
 
-        timer = getContext().system().scheduler().schedule(Duration.create(5, TimeUnit.SECONDS)/*.Zero()*/,
-                Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), Msg.TICK,
+        timer = getContext().system().scheduler().schedule(Duration.Zero(),
+                Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), TICK,
                 getContext().dispatcher(), getSelf());
 
         logger.info("Latency Monitor Started");
@@ -163,19 +197,23 @@ class LatencyMonitor extends UntypedActor {
     private Procedure<Object> SPLITTING = new Procedure<Object>() {
         @Override
         public void apply(Object msg) {
-            if (msg.equals(Msg.DONE)) { // Start monitoring
+            if (msg.equals(DONE)) { // Start monitoring
                 if (!timeoutTargets.isEmpty()) {
                     ActorRef timeoutTarget = timeoutTargets.poll();
                     logger.info("Too Many Messages Timeout");
                     operator.tell(new BoltOperator.Split(timeoutTarget), getSelf());
                     logger.info("Ask Operator to Do Split");
+                    targetsInfo.get(timeoutTarget).adaptOver = false;
+                    getContext().system().scheduler().scheduleOnce(Duration.create(splitAdaptiveTime, TimeUnit.SECONDS),
+                            getSelf(), new AdaptOver(timeoutTarget),
+                            getContext().dispatcher(), getSelf());
                 } else {
                     getContext().unbecome();
                     logger.info("Latency Monitor Start Monitoring");
                     // Start timer again
                     // TODO Just test here
-                    timer = getContext().system().scheduler().schedule(Duration.create(500, TimeUnit.MILLISECONDS)/*.Zero()*/,
-                            Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), Msg.TICK,
+                    timer = getContext().system().scheduler().schedule(Duration.Zero(),
+                            Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), TICK,
                             getContext().dispatcher(), getSelf());
                 }
             } else unhandled(msg); // Ignore all probes
@@ -184,19 +222,20 @@ class LatencyMonitor extends UntypedActor {
 
     @Override
     public void onReceive(Object msg) throws Exception {
-        if (msg.equals(Msg.TICK)) {
+        if (msg.equals(TICK)) {
             if (probes.timeout()) {
                 timer.cancel(); // Stop timer
                 getContext().become(SPLITTING);
-                getSelf().tell(Msg.DONE, getSelf()); // Start splitting
+                getSelf().tell(DONE, getSelf()); // Start splitting
                 logger.info("Latency Monitor Start Splitting");
                 return;
             }
             // Send probes to all targets
-            for (Pair<ActorRef, ActorRef> targetPort : targetPorts) {
-                ActorRef target = targetPort.first();
-                ActorRef port = targetPort.second();
-                port.tell(probes.newProbe(target), getSelf());
+            for (Map.Entry<ActorRef, TargetInfo> targetInfoEntry : targetsInfo.entrySet()) {
+                ActorRef target = targetInfoEntry.getKey();
+                TargetInfo targetInfo = targetInfoEntry.getValue();
+                if (targetInfo.adaptOver) // Only probe target which has done adapting
+                    targetInfo.port.tell(probes.newProbe(target), getSelf());
             }
         } else if (msg instanceof Probe) {
             probes.fill((Probe)msg);
@@ -206,16 +245,22 @@ class LatencyMonitor extends UntypedActor {
         } else if (msg instanceof Target) {
             Target target = (Target)msg;
             if (target.toAdd) {
-                probes.addTarget(target.target);
-                targetPorts.add(new Pair<ActorRef, ActorRef>(target.target, target.port));
+                logger.debug("Add target " + target.target);
+                targetsInfo.put(target.target, new TargetInfo(target.port));
+                getContext().system().scheduler().scheduleOnce(Duration.create(startAdaptiveTime, TimeUnit.SECONDS),
+                        getSelf(), new AdaptOver(target.target),
+                        getContext().dispatcher(), getSelf());
             } else {
+                logger.debug("Remove target " + target.target);
                 probes.removeTarget(target.target);
-                for (Pair<ActorRef, ActorRef> targetPort : targetPorts) {
-                    if (targetPort.first().equals(target.target)) {
-                        targetPorts.remove(targetPort);
-                        break;
-                    }
-                }
+                targetsInfo.remove(target.target);
+            }
+        } else if (msg instanceof AdaptOver) { // Adapt over
+            AdaptOver adaptOver = (AdaptOver)msg;
+            logger.debug("Adapt over " + adaptOver.target);
+            if (targetsInfo.containsKey(adaptOver.target)) { // It may be removed before
+                probes.addTarget(adaptOver.target);
+                targetsInfo.get(adaptOver.target).adaptOver = true;
             }
         } else unhandled(msg);
     }

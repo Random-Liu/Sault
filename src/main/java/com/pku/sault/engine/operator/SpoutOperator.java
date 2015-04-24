@@ -73,7 +73,7 @@ public class SpoutOperator extends UntypedActor {
         // Start workers
         for (Address resource : this.resources) {
             // Start subOperator remotely
-            ActorRef subOperator = getContext().actorOf(SpoutSubOperator.props(spout, targetRouters)
+            ActorRef subOperator = getContext().actorOf(SpoutSubOperator.props(spout)
                     .withDeploy(new Deploy(new RemoteScope(resource))));
             subOperators.add(subOperator);
         }

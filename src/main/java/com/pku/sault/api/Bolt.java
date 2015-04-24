@@ -30,6 +30,10 @@ public abstract class Bolt implements Cloneable, Serializable {
 	// Timeout configuration
 	private int expiredTimeout = 30; // 30s by default
 
+	// Time to adaptive new target
+	private int startAdaptiveTime = 5; // 5s
+	private int splitAdaptiveTime = 2; // 2s
+
     // [Caution] prepare and cleanup will also be called during migration
 	public abstract void prepare(Collector collector);
 	public abstract void execute(Tuple tuple);
@@ -82,11 +86,27 @@ public abstract class Bolt implements Cloneable, Serializable {
 		return expiredTimeout;
 	}
 
-	public void setExpiredTimeout(int expiredTimeout) {
+	protected void setExpiredTimeout(int expiredTimeout) {
 		this.expiredTimeout = expiredTimeout;
 	}
 
-    // Expose clone function
+	public int getStartAdaptiveTime() {
+		return startAdaptiveTime;
+	}
+
+	protected void setStartAdaptiveTime(int startAdaptiveTime) {
+		this.startAdaptiveTime = startAdaptiveTime;
+	}
+
+	public int getSplitAdaptiveTime() {
+		return splitAdaptiveTime;
+	}
+
+	protected void setSplitAdaptiveTime(int splitAdaptiveTime) {
+		this.splitAdaptiveTime = splitAdaptiveTime;
+	}
+
+	// Expose clone function
 	public Bolt clone() throws CloneNotSupportedException {
 		return (Bolt)super.clone();
 	}

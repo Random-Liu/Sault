@@ -1,6 +1,7 @@
 package com.pku.sault.engine.operator;
 
 import java.io.Serializable;
+import java.util.Queue;
 
 import com.pku.sault.api.Tuple;
 
@@ -53,5 +54,17 @@ class KeyWrapper implements Serializable {
 		a += ~(a<<11);
 		a ^=  (a>>16);
 		return a;
+	}
+}
+
+class TupleWrapperBlock implements Serializable {
+	private static final long serialVersionUID = 1L;
+	private final Queue<TupleWrapper> tupleWrappers;
+	TupleWrapperBlock(Queue<TupleWrapper> tupleWrappers) {
+		this.tupleWrappers = tupleWrappers;
+	}
+
+	Queue<TupleWrapper> getTupleWrappers() {
+		return tupleWrappers;
 	}
 }

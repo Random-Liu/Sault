@@ -11,7 +11,8 @@ public class Logger {
     private enum Level {
         INFO,
         WARN,
-        ERROR
+        ERROR,
+        DEBUG
     }
 
     public enum Role {
@@ -25,28 +26,43 @@ public class Logger {
         DRIVER
     }
 
+    private boolean enabled;
+
     private Role role;
 
-   public  Logger(Role role) {
+    public Logger(Role role) {
         this.role = role;
+        this.enabled = true;
     }
 
     private void log(Level level, Role role, String msg) {
         PrintStream ps;
-        if (level == Level.INFO) ps = System.out;
+        if (level == Level.INFO || level == Level.DEBUG) ps = System.out;
         else ps = System.err;
         ps.println("[" + level + "] [" + new Date() + "] [" + role + "] " + msg);
     }
 
     public void info(String msg) {
-        log(Level.INFO, role, msg);
+        if (enabled)
+            log(Level.INFO, role, msg);
     }
 
     public void warn(String msg) {
-        log(Level.WARN, role, msg);
+        if (enabled)
+            log(Level.WARN, role, msg);
     }
 
     public void error(String msg) {
-        log(Level.ERROR, role, msg);
+        if (enabled)
+            log(Level.ERROR, role, msg);
+    }
+
+    public void debug(String msg) {
+        if (enabled)
+            log(Level.DEBUG, role, msg);
+    }
+
+    public void disable() {
+        enabled = false;
     }
 }

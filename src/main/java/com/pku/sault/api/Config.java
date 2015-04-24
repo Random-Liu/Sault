@@ -13,7 +13,7 @@ public class Config implements Serializable {
 	/**
 	 * Resource Configuration
 	 */
-	private int nodeNumber = 24;
+	private int nodeNumber = 12;
 	private int resourceOfNode = 16;
 	private String sparkMaster = "local[16]";
 	

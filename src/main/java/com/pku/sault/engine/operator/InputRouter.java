@@ -11,6 +11,7 @@ import akka.actor.UntypedActor;
 import akka.japi.Creator;
 import com.pku.sault.api.Bolt;
 import com.pku.sault.api.Tuple;
+import com.pku.sault.engine.util.Constants;
 import com.pku.sault.engine.util.Logger;
 import scala.concurrent.duration.Duration;
 
@@ -77,8 +78,16 @@ class InputRouter extends UntypedActor {
     private ActorRef lastTarget; // Used to send probe
     private ActorRef outputRouter; // Used when lastTarget == null
 
-    private final String TIMEOUT_TICK = "TICK";
+    private final int TIMEOUT_TICK = 0;
     private Cancellable timer;
+
+    // Just for test
+    private boolean testing = true;
+    private Cancellable reportTimer;
+    private final long reportInterval = 2;
+    private final int REPORT = 1;
+    private int receivedMessageNumber = 0;
+    private int receivedBlockNumber = 0;
 
 	public static Props props(final Bolt bolt, final ActorRef outputRouter) {
 		return Props.create(new Creator<InputRouter>() {
@@ -91,6 +100,7 @@ class InputRouter extends UntypedActor {
 
 	InputRouter(Bolt bolt, ActorRef outputRouter) {
         this.logger = new Logger(Logger.Role.INPUT_ROUTER);
+        logger.disable();
         this.bolt = bolt;
         this.EXPIRED_TIMEOUT = bolt.getExpiredTimeout();
         this.outputRouter = outputRouter;
@@ -98,27 +108,28 @@ class InputRouter extends UntypedActor {
         if (EXPIRED_TIMEOUT != Bolt.INFINITY_TIMEOUT) {
             timer = getContext().system().scheduler().schedule(Duration.Zero(),
                     Duration.create(EXPIRED_TIMEOUT, TimeUnit.SECONDS), getSelf(), TIMEOUT_TICK,
-                    getContext().dispatcher(), getSelf());
+                    getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
+        }
+
+        if (testing) {
+            // Just for test
+            this.reportTimer =
+                    timer = getContext().system().scheduler().schedule(Duration.Zero(),
+                            Duration.create(reportInterval, TimeUnit.SECONDS), getSelf(), REPORT,
+                            getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
         }
 	}
 
 	@Override
 	public void onReceive(Object msg) throws Exception {
 		if (msg instanceof TupleWrapper) {
-            TupleWrapper tupleWrapper = (TupleWrapper) msg;
-            // track(tupleWrapper); // Just for test
-            ActorRef target = routerMap.route(tupleWrapper.getKey());
-            if (target == null) {
-                // long before = System.nanoTime();
-                target = getContext().actorOf(BoltWorker.props(tupleWrapper.getKey(), bolt, outputRouter));
-                // long mid = System.nanoTime();
-                routerMap.setTarget(tupleWrapper.getKey(), target);
-                // long end = System.nanoTime();
-                // System.out.println("Create actor: " + (double)(mid - before) / 1000000 + " ms");
-                // System.out.println("Insert actor: " + (double)(end - mid) / 1000000 + " ms");
-            }
-            target.forward(msg, getContext());
-            lastTarget = target; // Set last target here
+            routeMessage((TupleWrapper)msg);
+            ++receivedBlockNumber;
+        } else if (msg instanceof TupleWrapperBlock) {
+            TupleWrapperBlock block = (TupleWrapperBlock)msg;
+            for (TupleWrapper tupleWrapper : block.getTupleWrappers())
+                routeMessage(tupleWrapper);
+            ++receivedBlockNumber;
         } else if (LatencyMonitor.isProbe(msg)) {
             forwardProbe(msg);
         } else if (msg.equals(TIMEOUT_TICK)) { // Stop expired targets
@@ -126,8 +137,24 @@ class InputRouter extends UntypedActor {
             for (ActorRef expiredTarget : expiredTargets) {
                 getContext().stop(expiredTarget);
             }
+        } else if (msg.equals(REPORT)) {
+            logger.info("Receive " + receivedMessageNumber + " messages in " + receivedBlockNumber + " blocks in 2s");
+            receivedMessageNumber = 0;
+            receivedBlockNumber = 0;
         } else unhandled(msg);
 	}
+
+    private void routeMessage(TupleWrapper tupleWrapper) {
+        track(tupleWrapper); // Just for test
+        ActorRef target = routerMap.route(tupleWrapper.getKey());
+        if (target == null) {
+            target = getContext().actorOf(BoltWorker.props(tupleWrapper.getKey(), bolt, outputRouter));
+            routerMap.setTarget(tupleWrapper.getKey(), target);
+        }
+        target.forward(tupleWrapper, getContext());
+        lastTarget = target; // Set last target here
+        ++receivedMessageNumber;
+    }
 
     // Used for latency monitor
     private void forwardProbe(Object msg) {
@@ -142,20 +169,23 @@ class InputRouter extends UntypedActor {
     @Override
     public void postStop() {
         timer.cancel();
+        if (reportTimer != null && !reportTimer.isCancelled()) reportTimer.cancel();
     }
 
-    /*
     // Just for test
     long averageTime = 0;
+    long lastTimeStamp = System.currentTimeMillis();
     long count = 0;
     private void track(TupleWrapper tuple) {
-        averageTime += System.currentTimeMillis() - (Long)((Tuple)(tuple.getTuple().getValue())).getKey();
+        long now = System.currentTimeMillis();
+        averageTime += now - (Long)((Tuple)(tuple.getTuple().getValue())).getKey();
         ++count;
         if (count >= 10000) {
-            System.out.println("Output to Input Latency: " + (double) averageTime / count + " ms");
+            logger.info("Output to Input Latency: " + (double) averageTime / count + " ms "
+                    + (now - lastTimeStamp) + " ms");
+            lastTimeStamp = now;
             averageTime = 0L;
             count = 0;
         }
     }
-    */
 }

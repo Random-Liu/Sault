@@ -6,6 +6,7 @@ import com.pku.sault.api.Spout;
 
 import akka.actor.*;
 import akka.japi.Creator;
+import com.pku.sault.engine.util.Constants;
 import com.pku.sault.engine.util.Logger;
 import scala.concurrent.duration.Duration;
 
@@ -99,6 +100,7 @@ class BoltWorker extends UntypedActor {
 		}
 		assert bolt != null;
         bolt.prepare(collector);
+        logger.disable();
 		logger.info("Bolt Started on " + getContext().system().name());
 
         /*
@@ -197,7 +199,7 @@ class SpoutWorker extends UntypedActor {
                 collector.flush(); // TODO Flush every execution current now, can be optimized later.
             } while (Timeout  == 0L);
 			scheduler = getContext().system().scheduler().scheduleOnce(Duration.create(Timeout, TimeUnit.MICROSECONDS),
-					getSelf(), EMIT, /*getContext().system().dispatchers().lookup("sault-dispatcher")*/getContext().dispatcher(), getSelf());
+					getSelf(), EMIT, getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
 		} else if (msg instanceof SpoutOperator.Activate) {
             SpoutOperator.Activate activate = (SpoutOperator.Activate)msg;
             if (activate.toActivate) { // activate spout

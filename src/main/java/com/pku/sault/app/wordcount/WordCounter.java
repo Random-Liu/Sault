@@ -9,7 +9,7 @@ class Emitter extends Spout {
 
 	Emitter () {
 		// TODO setInstanceNumber(16) => dead lock, why?
-		setInstanceNumber(8);
+		setInstanceNumber(4);
 		setParallelism(16);
 	}
 
@@ -22,20 +22,26 @@ class Emitter extends Spout {
 	@Override
 	public long nextTuple() {
 		//System.out.println("Emitting");
-		for (int i = 0; i < 6; ++i) {
+		for (int i = 0; i < 128; ++i) {
 			collector.emit(new Tuple(""
 					+ (char) (Math.random() * 26 + 'a')
 					+ (char) (Math.random() * 26 + 'a')
-					+ (char) (Math.random() * 26 + 'a')
+					+ (char) (Math.random() * 3 + 'a') // 26 * 26 *3 = 2028 words
 					, new Tuple(System.currentTimeMillis(), 1)));
 		}
 		long newNow = System.currentTimeMillis();
 		if (newNow - now < 10000)
-			return 50000L; //2s
-		//else if (newNow - now < 20000)
-		//	return 20000;
-		//else //if (newNow - now < 30000)
-		else	return 1000;
+			return 50000L;
+		//	return 1000000L; //2s
+		else if (newNow - now < 20000)
+			return 20000L;
+		else if (newNow - now < 30000)
+			return 10000L;
+		else if (newNow - now < 40000)
+			return 5000L;
+		else
+			return 1000L;
+		//else	return 1000;
 		//else
 			//return 1000;
 		//++x;
@@ -64,7 +70,7 @@ class Counter extends Bolt {
 	Counter (int parallelism) {
 		setReactionFactor(20);
 		setInitialParallelism(parallelism);
-		setMaxLatency(100);
+		setMaxLatency(300);
 	}
 
 	private Collector collector;
@@ -95,7 +101,9 @@ class Counter extends Bolt {
 		long newNow = System.currentTimeMillis();
 		if (newNow - now >= sample_interval) {
 			now = newNow;
-			System.out.println(word + " " + (double)averageTime / wordCount + "");
+			if (Math.random() <= 0.001 * getInitialParallelism()) {
+				System.out.println(word + " " + (double) averageTime / wordCount + "");
+			}
 			averageTime = 0L;
 			this.collector.emit(new Tuple(word, wordCount));
 			// System.out.println(word + " " + wordCount);

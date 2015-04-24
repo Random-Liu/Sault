@@ -1,5 +1,6 @@
 package com.pku.sault.engine.operator;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import akka.actor.ActorRef;
@@ -17,8 +18,10 @@ class SpoutSubOperator extends UntypedActor {
 	private ActorRef outputRouter;
 	private Logger logger;
 
-	SpoutSubOperator(Spout spout, Map<String, RouteTree> routerTable) {
-		this.outputRouter = getContext().actorOf(OutputRouter.props(routerTable));
+	SpoutSubOperator(Spout spout) {
+		// For sub spout, there must not be targets when initialized, because it will never be created
+		// dynamically. So we just pass empty target routers to it.
+		this.outputRouter = getContext().actorOf(OutputRouter.props(new HashMap<String, RouteTree>()));
 		// In fact there is no input, using BroadcastPool so that we can send command
 		// to the workers in the future.
 		this.workerPool = getContext().actorOf(new BroadcastPool(spout.getInstanceNumber()).props(
@@ -29,11 +32,11 @@ class SpoutSubOperator extends UntypedActor {
 		logger.info("Spout Sub-Operator Started.");
 	}
 
-	static Props props(final Spout spout, final Map<String, RouteTree> routerTable) {
+	static Props props(final Spout spout) {
 		return Props.create(new Creator<SpoutSubOperator>() {
 			private static final long serialVersionUID = 1L;
 			public SpoutSubOperator create() throws Exception {
-				return new SpoutSubOperator(spout, routerTable);
+				return new SpoutSubOperator(spout);
 			}
 		});
 	}

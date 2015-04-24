@@ -118,7 +118,9 @@ public class BoltOperator extends UntypedActor {
 		// Start sub-operators
 		for (Address resource : this.resources) {
 			// Start subOperator remotely
-			ActorRef subOperator = getContext().actorOf(BoltSubOperator.props(this.bolt, targetRouters)
+            // Pass target routers will cause shared memory
+			ActorRef subOperator = getContext().actorOf(BoltSubOperator.props(this.bolt, /*targetRouters*/
+                    new HashMap<String, RouteTree>())
 					.withDeploy(new Deploy(new RemoteScope(resource))));
 			subOperators.add(subOperator);
 		}
@@ -161,9 +163,9 @@ public class BoltOperator extends UntypedActor {
             targetPorts.add(new Pair<ActorRef, ActorRef>(subOperatorInfoEntry.getKey(), subOperatorInfoEntry.getValue().port));
 
         // This is the only way I can come up with now.
-        //this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
-        //this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
-        //     .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
+        this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
+        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
+           .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
 
 		// Register on Targets and Request Routers from Targets
 		if (targets != null) { // If targets == null, it means that there are no initial targets.
@@ -224,7 +226,7 @@ public class BoltOperator extends UntypedActor {
             }
             assert nodes.size() == 1;
             Address node = nodes.get(0);
-            ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, targetRouters)
+            ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, cloneTargetRouters())
                     .withDeploy(new Deploy(new RemoteScope(node))));
             int newLowerBound = router.split(originalLowerBound, null); // Fill this cell later
             // int upperBound = router.getUpperBound(newLowerBound);
@@ -273,7 +275,7 @@ public class BoltOperator extends UntypedActor {
                 }
                 assert nodes.size() == 1;
                 Address node = nodes.get(0);
-                ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, targetRouters)
+                ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, cloneTargetRouters())
                         .withDeploy(new Deploy(new RemoteScope(node))));
                 Future<Object> newPortFuture = Patterns.ask(newSubOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout);
                 ActorRef newPort = (ActorRef)Await.result(newPortFuture, Constants.futureTimeout.duration());
@@ -296,6 +298,14 @@ public class BoltOperator extends UntypedActor {
     private void updateUpstreamRouter() {
         for (ActorRef source : sources.values())
             source.tell(new Operator.Router(id, router), getSelf()); // Update router of all sources
+    }
+
+    private HashMap<String, RouteTree> cloneTargetRouters() {
+        HashMap<String, RouteTree> newTargetRouters = new HashMap<String, RouteTree>();
+        for (Entry<String, RouteTree> targetRouterEntry : targetRouters.entrySet())
+            newTargetRouters.put(targetRouterEntry.getKey(), targetRouterEntry.getValue());
+        // Because router can only be modified by the operator, so we do not need to clone it.
+        return newTargetRouters;
     }
 
     private void doTest(Test test) {
