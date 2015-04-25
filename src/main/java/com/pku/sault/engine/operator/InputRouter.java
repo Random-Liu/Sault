@@ -76,6 +76,7 @@ class InputRouter extends UntypedActor {
     private ActorRef operator; // Only used when report
 	private RouterMap routerMap;
     private ActorRef lastTarget; // Used to send probe
+    private int receivedMessageSinceLastProbe = 0;
     private ActorRef outputRouter; // Used when lastTarget == null
 
     private final int TIMEOUT_TICK = 0;
@@ -145,7 +146,8 @@ class InputRouter extends UntypedActor {
 	}
 
     private void routeMessage(TupleWrapper tupleWrapper) {
-        track(tupleWrapper); // Just for test
+        ++receivedMessageSinceLastProbe;
+        // track(tupleWrapper); // Just for test
         ActorRef target = routerMap.route(tupleWrapper.getKey());
         if (target == null) {
             target = getContext().actorOf(BoltWorker.props(tupleWrapper.getKey(), bolt, outputRouter));
@@ -161,6 +163,8 @@ class InputRouter extends UntypedActor {
         // The input router will forward probe to the target of last message,
         // so that to make sure that the probe is sent to a worker which is active
         // recently.
+        LatencyMonitor.setProbeRate(msg, receivedMessageSinceLastProbe);
+        receivedMessageSinceLastProbe = 0;
         if (lastTarget != null) lastTarget.forward(msg, getContext());
             // Forward probe to the outputRouter directly if there is no available target
         else outputRouter.forward(msg, getContext());

@@ -38,22 +38,6 @@ public class BoltOperator extends UntypedActor {
         // Add more later
     }
 
-    static class Split implements Serializable {
-        private static final long serialVersionUID = 1L;
-        final ActorRef subOperator;
-        Split(ActorRef subOperator) {
-            this.subOperator = subOperator;
-        }
-    }
-
-    static class Merge implements Serializable {
-        private static final long serialVersionUID = 1L;
-        final ActorRef subOperator;
-        Merge(ActorRef subOperator) {
-            this.subOperator = subOperator;
-        }
-    }
-
     private class SubOperatorInfo {
         int lowerBound;
         Address resource;
@@ -133,12 +117,9 @@ public class BoltOperator extends UntypedActor {
 		// [Caution] Block again here!
 		List<Future<Object>> portFutures = new LinkedList<Future<Object>>();
 
-        for (int subOperatorIndex = 0; subOperatorIndex < subOperators.size(); ++subOperatorIndex) {
-            // int lowerBound = lowerBounds.get(subOperatorIndex);
-            // int upperBound = router.getUpperBound(lowerBound);
-            ActorRef subOperator = subOperators.get(subOperatorIndex);
+        for (ActorRef subOperator : subOperators)
             portFutures.add(Patterns.ask(subOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout));
-        }
+
 		Future<Iterable<Object>> portsFuture = sequence(portFutures, getContext().dispatcher());
 		try {
 			Iterable<Object> portObjects = Await.result(portsFuture, Constants.futureTimeout.duration());
@@ -165,7 +146,7 @@ public class BoltOperator extends UntypedActor {
         // This is the only way I can come up with now.
         this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
         this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
-           .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
+                .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
 
 		// Register on Targets and Request Routers from Targets
 		if (targets != null) { // If targets == null, it means that there are no initial targets.
@@ -206,94 +187,141 @@ public class BoltOperator extends UntypedActor {
 			// Broadcast new router to all sub operators
 			for (ActorRef subOperator : subOperatorsInfo.keySet())
 				subOperator.forward(msg, getContext());
-		} else if (msg instanceof Split) {
-			logger.info("Start splitting");
-            // Number of sub operator should never exceed max parallelism.
-            // TODO: Return here
-            assert bolt.getMaxParallelism() > subOperatorsInfo.size();
-            // 1. Create new sub operator.
-            // 2. Update upstream router.
-            Split split = (Split)msg;
-            ActorRef originalSubOperator = split.subOperator;
-            SubOperatorInfo originalSubOperatorInfo = subOperatorsInfo.get(originalSubOperator);
-            // ActorRef originalPort = originalSubOperatorInfo.port;
-            int originalLowerBound = originalSubOperatorInfo.lowerBound;
-
-            List<Address> nodes = resourceManager.allocateResource(1);
-            if (nodes.isEmpty()) { // There is no more resources, or meet an error during resource allocating
-                logger.warn("Allocating resource error when elastic scaling.");
-                return;
-            }
-            assert nodes.size() == 1;
-            Address node = nodes.get(0);
-            ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, cloneTargetRouters())
-                    .withDeploy(new Deploy(new RemoteScope(node))));
-            int newLowerBound = router.split(originalLowerBound, null); // Fill this cell later
-            // int upperBound = router.getUpperBound(newLowerBound);
-            Future<Object> newPortFuture = Patterns.ask(newSubOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout);
-            ActorRef newPort = (ActorRef)Await.result(newPortFuture, Constants.futureTimeout.duration());
-            router.setTarget(newLowerBound, newPort);
-            subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(newLowerBound, node, newPort));
-
-            // TODO: If we split according to resource usage, we should never start a latency monitor.
-            LatencyMonitor.done(latencyMonitor, getContext()); // Tell latency monitor that splitting is done.
-            // Because DONE message is sent first, the latency monitor must be in working state now.
-            LatencyMonitor.addTarget(latencyMonitor, newSubOperator, newPort, getContext()); // Start monitoring new subOperator
-
-            updateUpstreamRouter();
-        } else if (msg instanceof Merge) {
-            logger.info("Start merging");
-            // 1. Update upstream router
-            // 2. TODO: Stop useless sub operator
-            //    Current now, don't stop it. Because it should finish processing the tuples already sent to it.
-            //    If we add ack server later, we can stop it immediately.
-            Merge merge = (Merge)msg;
-            ActorRef mergedSubOperator = merge.subOperator;
-            SubOperatorInfo mergedSubOperatorInfo = subOperatorsInfo.get(mergedSubOperator);
-            int mergedLowerBound = mergedSubOperatorInfo.lowerBound;
-
-            if (router.isSiblingAvailable(mergedLowerBound)) { // The sub operator can be merged
-                ActorRef siblingSubOperatorPort = router.sibling(mergedLowerBound);
-                ActorRef siblingSubOperator = null;
-                for (Entry<ActorRef, SubOperatorInfo> subOperatorInfoEntry : subOperatorsInfo.entrySet()) {
-                    // Just traverse current now
-                    if (subOperatorInfoEntry.getValue().port.equals(siblingSubOperatorPort)) {
-                        siblingSubOperator = subOperatorInfoEntry.getKey();
-                        break;
-                    }
-                }
-                assert (siblingSubOperator != null);
-                SubOperatorInfo siblingSubOperatorInfo = subOperatorsInfo.get(siblingSubOperator);
-                siblingSubOperatorInfo.lowerBound = router.merge(mergedLowerBound);
-                logger.info("Sub operator is merged");
-            } else { // If the sub operator can not be merged, just relocate it
-                List<Address> nodes = resourceManager.allocateResource(1); // The resource manager will ensure that the
-                // resource which will be released will not been allocated any more.
-                if (nodes.isEmpty()) { // There is no more resources, or meet an error during resource allocating
-                    logger.warn("Allocating resource error when elastic scaling.");
-                    return;
-                }
-                assert nodes.size() == 1;
-                Address node = nodes.get(0);
-                ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, cloneTargetRouters())
-                        .withDeploy(new Deploy(new RemoteScope(node))));
-                Future<Object> newPortFuture = Patterns.ask(newSubOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout);
-                ActorRef newPort = (ActorRef)Await.result(newPortFuture, Constants.futureTimeout.duration());
-                router.setTarget(mergedLowerBound, newPort);
-                subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(mergedLowerBound, node, newPort));
-                LatencyMonitor.addTarget(latencyMonitor, mergedSubOperator, newPort, getContext()); // Start monitoring new subOperator
-                logger.info("Sub operator is relocated");
-            }
-
-            // The merge request should be invoked by the resource manager
-            LatencyMonitor.removeTarget(latencyMonitor, mergedSubOperator, getContext()); // Remove merged sub-operator
-            subOperatorsInfo.remove(mergedSubOperator);
-            updateUpstreamRouter();
+		} else if (msg instanceof LatencyMonitor.LoadStatus) { // Handle load status
+            handleLoadStatus(((LatencyMonitor.LoadStatus) msg).loadStatus);
         } else if (msg instanceof Test) {
             doTest((Test) msg); // Only used for test
         } else unhandled(msg);
-		// TODO Dynamic merging sub-operators
 	}
+
+    private void handleLoadStatus(Map<ActorRef, LatencyMonitor.LOAD_STATUS> targetsLoadStatus) {
+        Set<ActorRef> doneTargets = new HashSet<ActorRef>();
+        boolean needUpdate = false;
+        for (Entry<ActorRef, LatencyMonitor.LOAD_STATUS> targetLoadStatusEntry : targetsLoadStatus.entrySet()) {
+            ActorRef target = targetLoadStatusEntry.getKey();
+            LatencyMonitor.LOAD_STATUS loadStatus = targetLoadStatusEntry.getValue();
+            if (!doneTargets.contains(target)) {
+                if (loadStatus == LatencyMonitor.LOAD_STATUS.OVERLOAD) // Split
+                    needUpdate = needUpdate || doSplit(target);
+                else if (loadStatus == LatencyMonitor.LOAD_STATUS.UNDERLOAD) { // Merge
+                    // Select left or right
+                    int lowerBound = subOperatorsInfo.get(target).lowerBound;
+                    int leftOrRight = 0; // -1 means left, 1 means right, 0 means none
+                    ActorRef leftSibling = portToTarget(router.leftSibling(lowerBound));
+                    ActorRef rightSibling = portToTarget(router.rightSibling(lowerBound));
+                    // 1. If sibling is done, it will not be used
+                    // 2. The priority is UNDERLOAD > LOWLOAD > NORMALLOAD.
+                    // HIGHLOAD and OVERLOAD will never be merged
+                    // TODO Relocate low load target which can not be merged
+                    boolean isLeftSiblingAvailable = canBeMerged(targetsLoadStatus, doneTargets, leftSibling);
+                    boolean isRightSiblingAvailable = canBeMerged(targetsLoadStatus, doneTargets, rightSibling);
+                    if (isLeftSiblingAvailable || isRightSiblingAvailable) {
+                        if (!isLeftSiblingAvailable) leftOrRight = 1; // Select right
+                        else if (!isRightSiblingAvailable) leftOrRight = -1; // Select left
+                        else {
+                            LatencyMonitor.LOAD_STATUS rightSiblingLoadStatus = targetsLoadStatus.get(rightSibling);
+                            LatencyMonitor.LOAD_STATUS leftSiblingLoadStatus = targetsLoadStatus.get(leftSibling);
+                            if (leftSiblingLoadStatus.compareTo(rightSiblingLoadStatus) < 0) // Left is better
+                                leftOrRight = -1; // Select left
+                            else if (leftSiblingLoadStatus.compareTo(rightSiblingLoadStatus) > 0) // Right is better
+                                leftOrRight = 1; // Select right
+                            else // Both are equal
+                                leftOrRight = (Math.random() > 0.5) ? 1 : -1; // Randomly select
+                        }
+                    }
+                    if (leftOrRight != 0) {
+                        needUpdate = needUpdate || doMerge(target, leftOrRight);
+                        // Set done for siblings
+                        if (leftOrRight < 0) doneTargets.add(leftSibling);
+                        else doneTargets.add(rightSibling);
+                    }
+                }
+                doneTargets.add(target);
+            }
+        }
+        if (needUpdate) // Avoid unnecessary update
+            updateUpstreamRouter();
+        LatencyMonitor.done(latencyMonitor, getContext()); // Tell latency monitor that load status has been processed.
+    }
+
+    private boolean doSplit(ActorRef target) { // Return whether splitting success or fail
+        if (bolt.getMaxParallelism() <= subOperatorsInfo.size()) {
+            logger.debug("Reach max parallelism, will not split");
+            return false;
+        }
+        logger.info("Start splitting");
+        // 1. Create new sub operator.
+        // 2. Update upstream router.
+        SubOperatorInfo targetInfo = subOperatorsInfo.get(target);
+        int targetLowerBound = targetInfo.lowerBound;
+
+        List<Address> nodes = resourceManager.allocateResource(1);
+        if (nodes.isEmpty()) { // There is no more resources, or meet an error during resource allocating
+            logger.warn("Allocating resource error when elastic scaling.");
+            return false;
+        }
+        assert nodes.size() == 1;
+        Address node = nodes.get(0);
+        ActorRef newSubOperator = getContext().actorOf(BoltSubOperator.props(bolt, cloneTargetRouters())
+                .withDeploy(new Deploy(new RemoteScope(node))));
+        Future<Object> newPortFuture = Patterns.ask(newSubOperator, BoltSubOperator.PORT_PLEASE, Constants.futureTimeout);
+        ActorRef newPort;
+        try {
+            newPort = (ActorRef) Await.result(newPortFuture, Constants.futureTimeout.duration());
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
+            logger.error("Future timeout when request sub operator port");
+            return false;
+        }
+
+        int newLowerBound = router.split(targetLowerBound, newPort);
+        subOperatorsInfo.put(newSubOperator, new SubOperatorInfo(newLowerBound, node, newPort));
+
+        LatencyMonitor.addTarget(latencyMonitor, newSubOperator, newPort, getContext()); // Start monitoring new subOperator
+
+        logger.info("Sub operator is split");
+        return true;
+    }
+
+    private boolean doMerge(ActorRef target, int leftOrRight) { // Return whether merging success or fail
+        if (bolt.getMinParallelism() >= subOperatorsInfo.size()) {
+            logger.debug("Reach min parallelism, will not merge");
+            return false;
+        }
+        logger.info("Start merging");
+        SubOperatorInfo targetInfo = subOperatorsInfo.get(target);
+        int targetLowerBound = targetInfo.lowerBound;
+        if (leftOrRight < 0) {
+            assert (router.leftSibling(targetLowerBound) != null);
+            ActorRef leftSibling = portToTarget(router.leftSibling(targetLowerBound));
+            SubOperatorInfo leftSiblingSubOperatorInfo = subOperatorsInfo.get(leftSibling);
+            leftSiblingSubOperatorInfo.lowerBound = router.mergeLeft(targetLowerBound);
+        } else {
+            assert (router.rightSibling(targetLowerBound) != null);
+            ActorRef rightSibling = portToTarget(router.rightSibling(targetLowerBound));
+            SubOperatorInfo rightSiblingSubOperatorInfo = subOperatorsInfo.get(rightSibling);
+            rightSiblingSubOperatorInfo.lowerBound = router.mergeRight(targetLowerBound);
+        }
+
+        LatencyMonitor.removeTarget(latencyMonitor, target, getContext()); // Remove merged sub-operator
+        subOperatorsInfo.remove(target);
+        // TODO: Stop useless sub operator after timeout, implement this after testing
+
+        logger.info("Sub operator is merged");
+        return true;
+    }
+
+    private boolean canBeMerged(Map<ActorRef, LatencyMonitor.LOAD_STATUS> targetsLoadStatus,
+                                Set<ActorRef> doneTargets,
+                                ActorRef sibling) {
+        if (sibling != null) {
+            LatencyMonitor.LOAD_STATUS loadStatus = targetsLoadStatus.get(sibling);
+            return !doneTargets.contains(sibling) && (loadStatus == LatencyMonitor.LOAD_STATUS.UNDERLOAD
+                    || loadStatus == LatencyMonitor.LOAD_STATUS.LOWLOAD
+                    || loadStatus == LatencyMonitor.LOAD_STATUS.NORMORLLOAD);
+        }
+        return false;
+    }
 
     private void updateUpstreamRouter() {
         for (ActorRef source : sources.values())
@@ -308,20 +336,34 @@ public class BoltOperator extends UntypedActor {
         return newTargetRouters;
     }
 
+    private ActorRef portToTarget(ActorRef port) {
+        for (Entry<ActorRef, SubOperatorInfo> subOperatorInfoEntry : subOperatorsInfo.entrySet()) {
+            // TODO Just traverse current now, if this becomes a bottleneck then optimize it
+            if (subOperatorInfoEntry.getValue().port.equals(port))
+                return subOperatorInfoEntry.getKey();
+        }
+        assert (true); // Should never be here
+        return null;
+    }
+
     private void doTest(Test test) {
         switch (test) {
             case SPLIT: { // Test split, split the first subOperator
                 assert !subOperatorsInfo.isEmpty();
                 Iterator<ActorRef> subOperatorIterator = subOperatorsInfo.keySet().iterator();
                 ActorRef subOperator = subOperatorIterator.next();
-                getSelf().tell(new Split(subOperator), getSelf());
+                doSplit(subOperator);
+                updateUpstreamRouter();
                 break;
             }
             case MERGE: {
                 assert !subOperatorsInfo.isEmpty();
                 Iterator<ActorRef> subOperatorIterator = subOperatorsInfo.keySet().iterator();
+                subOperatorIterator.next();
                 ActorRef subOperator = subOperatorIterator.next();
-                getSelf().tell(new Merge(subOperator), getSelf());
+                doMerge(subOperator, -1);
+                updateUpstreamRouter();
+                break;
             }
             default: break;
         }

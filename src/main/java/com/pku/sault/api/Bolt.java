@@ -23,9 +23,13 @@ public abstract class Bolt implements Cloneable, Serializable {
 	private int maxParallelism = 16;
 	private int initialParallelism = 4;
 
-    // Latency configuration
-    private int maxLatency = 500; // 200 ms by default
-    private int reactionFactor = 10; // reaction after 6 timeout probes by default
+    // Latency monitor configuration
+    private int maxLatency = 300; // 300 ms by default
+	private double overloadReactionFactor = 0.8; // Overload when 80% of overloadReactionTime is timeout by default
+	private int overloadReactionTime = 20; // Reaction in 20 probe period by default, 20 * 300 = 6000ms = 6s
+	private double underloadReactionFactor = 0.8; // Underload when 80% of underloadReactionTime is underload by default
+	private int underloadReactionTime = 100; // Reaction in 100 probe period by default, 100 & 300 = 30000ms = 30s
+	private double lowWaterMark = 0.1; // Underload when rate is under 10% of max rate by default
 
 	// Timeout configuration
 	private int expiredTimeout = 30; // 30s by default
@@ -41,6 +45,7 @@ public abstract class Bolt implements Cloneable, Serializable {
     public abstract Object get();
     public abstract void set(Object state);
 
+	/* Parallelism API */
     // Parallelism should be set before added to the graph
 	public int getMinParallelism() {
 		return minParallelism;
@@ -66,6 +71,7 @@ public abstract class Bolt implements Cloneable, Serializable {
 		this.initialParallelism = initialParallelism;
 	}
 
+	/* Elasticity API */
     public int getMaxLatency() {
         return maxLatency;
     }
@@ -74,20 +80,47 @@ public abstract class Bolt implements Cloneable, Serializable {
         this.maxLatency = maxLatency;
     }
 
-    public int getReactionFactor() {
-        return reactionFactor;
-    }
-
-    protected void setReactionFactor(int reactionFactor) {
-        this.reactionFactor = reactionFactor;
-    }
-
-	public int getExpiredTimeout() {
-		return expiredTimeout;
+	public double getOverloadReactionFactor() {
+		return overloadReactionFactor;
 	}
 
-	protected void setExpiredTimeout(int expiredTimeout) {
-		this.expiredTimeout = expiredTimeout;
+	protected void setOverloadReactionFactor(double overloadReactionFactor) {
+		assert (overloadReactionFactor <= 1 && overloadReactionFactor >= 0);
+		this.overloadReactionFactor = overloadReactionFactor;
+	}
+
+	public int getOverloadReactionTime() {
+		return overloadReactionTime;
+	}
+
+	protected void setOverloadReactionTime(int overloadReactionTime) {
+		this.overloadReactionTime = overloadReactionTime;
+	}
+
+	public double getUnderloadReactionFactor() {
+		return underloadReactionFactor;
+	}
+
+	protected void setUnderloadReactionFactor(double underloadReactionFactor) {
+		assert (underloadReactionFactor <= 1 && underloadReactionFactor >= 0);
+		this.underloadReactionFactor = underloadReactionFactor;
+	}
+
+	public int getUnderloadReactionTime() {
+		return underloadReactionTime;
+	}
+
+	protected void setUnderloadReactionTime(int underloadReactionTime) {
+		this.underloadReactionTime = underloadReactionTime;
+	}
+
+	public double getLowWaterMark() {
+		return lowWaterMark;
+	}
+
+	protected void setLowWaterMark(double lowWaterMark) {
+		assert (lowWaterMark <=1 && lowWaterMark >= 0);
+		this.lowWaterMark = lowWaterMark;
 	}
 
 	public int getStartAdaptiveTime() {
@@ -104,6 +137,14 @@ public abstract class Bolt implements Cloneable, Serializable {
 
 	protected void setSplitAdaptiveTime(int splitAdaptiveTime) {
 		this.splitAdaptiveTime = splitAdaptiveTime;
+	}
+
+	public int getExpiredTimeout() {
+		return expiredTimeout;
+	}
+
+	protected void setExpiredTimeout(int expiredTimeout) {
+		this.expiredTimeout = expiredTimeout;
 	}
 
 	// Expose clone function

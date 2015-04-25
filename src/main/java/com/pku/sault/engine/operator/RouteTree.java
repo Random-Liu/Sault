@@ -5,6 +5,7 @@ import java.util.*;
 import java.util.Map.Entry;
 
 import akka.actor.ActorRef;
+import com.sun.jersey.server.impl.managedbeans.ManagedBeanComponentProviderFactoryInitilizer;
 
 // TODO Modify this! Interesting!
 // TODO Use unsigned compare of Integer in comparator of routeMap
@@ -14,14 +15,6 @@ class RouteTree implements Serializable {
     private final int MIN_VALUE;
     private final int MAX_VALUE;
 	TreeMap<Integer, ActorRef> routeMap;
-
-    // Sub tree used by sub operators
-    RouteTree(int lowerBound, int upperBound, ActorRef target) {
-        MIN_VALUE = lowerBound;
-        MAX_VALUE = upperBound;
-        routeMap = new TreeMap<Integer, ActorRef>();
-        routeMap.put(MIN_VALUE, target);
-    }
 
     // The whole tree used by operator and up stream sub operators
 	RouteTree() {
@@ -110,75 +103,48 @@ class RouteTree implements Serializable {
 		// int middle = (lowerBound + upperBound) / 2;
 		// Because lowerBound must be even:
 		// 	(lowerBound / 2 + upperBound / 2) == (lowerBound + upperBound) / 2
-		assert(lowerBound % 2 == 0);
+		// assert(lowerBound % 2 == 0); Remove this assert because the new route tree can be split and merged whenever
 		int middle = (lowerBound / 2 + upperBound / 2);
 		routeMap.put(middle + 1, target);
 		return middle + 1;
 	}
-
-	// Is sibling exists (It may be split or < MIN_VALUE or > MAX_VALUE)
-	boolean isSiblingAvailable(int lowerBound) {
-		assert(isValidLowerBound(lowerBound));
-
-		int siblingLowerBound = siblingNode(lowerBound);
-		return (siblingLowerBound >= MIN_VALUE && siblingLowerBound <= MAX_VALUE
-                && !isSiblingSplit(siblingLowerBound, lowerBound));
-	}
 	
+	// Merge to left sibling.
 	// Remove target in given range. Return new lowerBound after merging, if you want to update
 	// lowerBound of the old target, we can just send a message to it.
 	// If failed, return -1
-	int merge(int lowerBound) {
+	int mergeLeft(int lowerBound) {
         assert isValidLowerBound(lowerBound);
-		int siblingLowerBound = siblingNode(lowerBound);
-		if (isSiblingSplit(siblingLowerBound, lowerBound)) {
-			System.err.println("Sibling is split, can not be merged");
-			return -1;
-		}
-		if (siblingLowerBound > lowerBound) {
-			routeMap.put(lowerBound, routeMap.get(siblingLowerBound));
-			routeMap.remove(siblingLowerBound);
-			return lowerBound;
-		} else {
-			routeMap.remove(lowerBound);
-			return siblingLowerBound;
-		}
-	}
-	
-	// Return sibling target, if sibling is split return null
-	ActorRef sibling(int lowerBound) {
-        assert(isValidLowerBound(lowerBound));
-		int siblingLowerBound = siblingNode(lowerBound);
-		// If siblingLowerBound < MIN_VALUE or > MAX_VALUE, it means that lowerBound is MIN_VALUE,
-		// it has no siblings.
-		if (siblingLowerBound < MIN_VALUE || siblingLowerBound > MAX_VALUE
-                || isSiblingSplit(siblingLowerBound, lowerBound)) {
-			System.err.println("Sibling is split or not exist");
-			return null;
-		}
-		return routeMap.get(siblingLowerBound);
+		Integer leftSiblingLowerBound = routeMap.lowerKey(lowerBound);
+		if (leftSiblingLowerBound == null) return -1;
+		routeMap.remove(lowerBound);
+		return leftSiblingLowerBound;
 	}
 
-	// Return whether sibling node is split
-	private boolean isSiblingSplit(int siblingLowerBound, int lowerBound) {
-		int siblingUpperBound = getUpperBound(siblingLowerBound);
-		if (siblingLowerBound > lowerBound)
-			return (siblingUpperBound - siblingLowerBound) != (siblingLowerBound - 1 - lowerBound);
-		else
-			return siblingUpperBound != lowerBound - 1;
+	// Merge to right sibling
+	// If failed, return -1
+	int mergeRight(int lowerBound) {
+		assert isValidLowerBound(lowerBound);
+		Entry<Integer, ActorRef> rightSiblingEntry = routeMap.higherEntry(lowerBound);
+		if (rightSiblingEntry == null) return -1;
+		int rightLowerBound = rightSiblingEntry.getKey();
+		ActorRef rightTarget = rightSiblingEntry.getValue();
+		routeMap.put(lowerBound, rightTarget);
+		routeMap.remove(rightLowerBound);
+		return lowerBound;
 	}
-	
-	// Return sibling lower bound, if lowerBound == MIN_VALUE and upperBound == MAX_VALUE
-	// the function will return value out of bound
-	// It is sure that:
-	// 		siblingNode(lowerBound) != lowerBound
-	private int siblingNode(int lowerBound) {
-		int upperBound = getUpperBound(lowerBound);
-		
-		int x = lowerBound ^ (upperBound + 1); // x
-		if ((x & (x-1)) == 0) // Left Node
-			return upperBound + 1;
-		else // Right Node
-			return (lowerBound - 1) & lowerBound;
+
+	ActorRef leftSibling(int lowerBound) {
+		assert(isValidLowerBound(lowerBound));
+		Entry<Integer, ActorRef> leftSiblingEntry = routeMap.lowerEntry(lowerBound);
+		if (leftSiblingEntry == null) return null; // it is the left most node
+		return leftSiblingEntry.getValue();
+	}
+
+	ActorRef rightSibling(int lowerBound) {
+		assert(isValidLowerBound(lowerBound));
+		Entry<Integer, ActorRef> rightSiblingEntry = routeMap.higherEntry(lowerBound);
+		if (rightSiblingEntry == null) return null; // it is the left most node
+		return rightSiblingEntry.getValue();
 	}
 }

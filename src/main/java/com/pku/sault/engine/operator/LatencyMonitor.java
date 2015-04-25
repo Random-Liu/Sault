@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
  */
 
 class LatencyMonitor extends UntypedActor {
-    // TODO Add moving average
     private static class Target implements Serializable {
         private static final long serialVersionUID = 1L;
         final ActorRef target;
@@ -44,74 +43,131 @@ class LatencyMonitor extends UntypedActor {
         final ActorRef target;
         final long id;
         final long now;
+        int rate; // TODO We use message number as rate current now, we'll decide to use block number or message number after we do some experiment
         Probe(ActorRef target, long id) {
             this.target = target;
             this.id = id;
             this.now = System.nanoTime(); // The time unit is ns
+            this.rate = 0;
         }
     }
 
+    static class LoadStatus implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final Map<ActorRef, LOAD_STATUS> loadStatus;
+        LoadStatus(Map<ActorRef, LOAD_STATUS> loadStatus) {
+            this.loadStatus = loadStatus;
+        }
+    }
+
+    static enum LOAD_STATUS {
+        UNDERLOAD, // Underload time exceed underloadReactionFactor
+        LOWLOAD, // Underload time under underloadReactionFactor
+        NORMORLLOAD, // No Timeout and no underload
+        HIGHLOAD, // Timeout time under overloadReactionFactor
+        OVERLOAD  // Timeout time exceed overloadReactionFactor
+    }
     private ActorRef operator;
     private final int probePeriod;
-    private final int reactionFactor;
+    private final double overloadReactionFactor;
+    private final int overloadReactionTime;
+    private final double underloadReactionFactor;
+    private final int underloadReactionTime;
+    private final double lowWaterMark;
 
     private class Probes {
-        private HashMap<ActorRef, Boolean> probes;
-        private HashMap<ActorRef, Integer> timeoutTimes;
+        private class ProbeStatus {
+            boolean isProbeTimeout = false;
+            boolean isProbeUnderload = false;
+            int timeoutTimes = 0;
+            int underloadTimes = 0;
+            int currentMaxRate = 0;
+            Queue<Boolean> timeoutHistory = new LinkedList<Boolean>();
+            Queue<Boolean> underloadHistory = new LinkedList<Boolean>();
+        }
+        private HashMap<ActorRef, ProbeStatus> probesStatus;
+
         int currentId;
         Probes() {
-            probes = new HashMap<ActorRef, Boolean>();
-            timeoutTimes = new HashMap<ActorRef, Integer>();
+            probesStatus = new HashMap<ActorRef, ProbeStatus>();
         }
 
         Probes(List<ActorRef> targets) {
-            probes = new HashMap<ActorRef, Boolean>();
+            probesStatus = new HashMap<ActorRef, ProbeStatus>();
             for (ActorRef target : targets)
-                probes.put(target, true);
-            timeoutTimes = new HashMap<ActorRef, Integer>();
-            for (ActorRef target : targets)
-                timeoutTimes.put(target, 0);
+                probesStatus.put(target, new ProbeStatus());
         }
 
         void addTarget(ActorRef target) {
-            probes.put(target, true); // The target will be monitored from next iteration
-            timeoutTimes.put(target, 0);
+            probesStatus.put(target, new ProbeStatus()); // The target will be monitored from next iteration
         }
 
         void removeTarget(ActorRef target) {
-            timeoutTimes.remove(target);
-            probes.remove(target);
+            probesStatus.remove(target);
         }
 
         void fill(Probe probe) {
             if (probe.id < currentId) return; // This is a timeout probe
             assert probe.id == currentId;
-            probes.put(probe.target, true);
-            timeoutTimes.put(probe.target, 0);
+            ProbeStatus probeStatus = probesStatus.get(probe.target);
+            probeStatus.isProbeTimeout = false;
+            if (probeStatus.currentMaxRate < probe.rate)
+                probeStatus.currentMaxRate = probe.rate;
+            else if (probe.rate < probeStatus.currentMaxRate * lowWaterMark)
+                probeStatus.isProbeUnderload = true;
         }
 
-        // This function will add elements in timeoutTargets
-        boolean timeout() {
-            timeoutTargets.clear();
-            for (Map.Entry<ActorRef, Boolean> probeEntry : probes.entrySet()) {
-                if (!probeEntry.getValue()) {
-                    int timeoutTime = timeoutTimes.get(probeEntry.getKey());
-                    ++timeoutTime;
-                    System.out.println("Timeout!!!!!!!!!!!!!!!!!!TimeoutTime: " + timeoutTime);
-                    if (timeoutTime >= reactionFactor) {
-                        timeoutTargets.offer(probeEntry.getKey());
-                        timeoutTimes.put(probeEntry.getKey(), 0);
-                        // It's time to do split, we don't want the history
-                    } else
-                        timeoutTimes.put(probeEntry.getKey(), timeoutTime);
+        // Update load status in targetsLoadStatus, if there is overload or underload,
+        // the function will return true which means the latency monitor should report
+        // load status to operator.
+        boolean updateStatus() {
+            boolean needReport = false;
+            for (Map.Entry<ActorRef, ProbeStatus> probeStatusEntry : probesStatus.entrySet()) {
+                ActorRef target = probeStatusEntry.getKey();
+                ProbeStatus probeStatus = probeStatusEntry.getValue();
+                // Update timeout status
+                if (probeStatus.timeoutHistory.size() >= overloadReactionTime) {
+                    boolean isOldestTimeout = probeStatus.timeoutHistory.poll();
+                    if (isOldestTimeout) --probeStatus.timeoutTimes;
                 }
-                probeEntry.setValue(false);
+                probeStatus.timeoutHistory.offer(probeStatus.isProbeTimeout);
+                if (probeStatus.isProbeTimeout) {
+                    ++probeStatus.timeoutTimes;
+                    probeStatus.currentMaxRate = 0; // Invalid max rate
+                }
+
+                // Update underload status
+                if (probeStatus.underloadHistory.size() >= underloadReactionTime) {
+                    boolean isOldestUnderload = probeStatus.underloadHistory.poll();
+                    if (isOldestUnderload) --probeStatus.underloadTimes;
+                }
+                probeStatus.underloadHistory.offer(probeStatus.isProbeUnderload);
+                if (probeStatus.isProbeUnderload) ++probeStatus.underloadTimes;
+
+                // Update load status
+                if (probeStatus.timeoutTimes >= overloadReactionFactor * overloadReactionTime) {
+                    targetsInfo.get(target).loadStatus = LOAD_STATUS.OVERLOAD;
+                    needReport = true;
+                } else if (probeStatus.timeoutTimes > 0)
+                    targetsInfo.get(target).loadStatus = LOAD_STATUS.HIGHLOAD;
+                else if (probeStatus.underloadTimes == 0)
+                    targetsInfo.get(target).loadStatus = LOAD_STATUS.NORMORLLOAD;
+                else if (probeStatus.underloadTimes < underloadReactionFactor * underloadReactionTime)
+                    targetsInfo.get(target).loadStatus = LOAD_STATUS.LOWLOAD;
+                else {
+                    targetsInfo.get(target).loadStatus = LOAD_STATUS.UNDERLOAD;
+                    needReport = true;
+                }
             }
-            ++currentId; // Probes with old id will be treated as timeout probe
-            return !timeoutTargets.isEmpty();
+            ++currentId;
+            return needReport;
         }
 
         Probe newProbe(ActorRef target) {
+            ProbeStatus probeStatus = probesStatus.get(target);
+            // When create new probe, assume it will timeout, when it is filled we'll set it false
+            probeStatus.isProbeTimeout = true;
+            probeStatus.isProbeUnderload = false;
             return new Probe(target, currentId);
         }
     }
@@ -119,14 +175,15 @@ class LatencyMonitor extends UntypedActor {
     private class TargetInfo {
         ActorRef port;
         boolean adaptOver;
+        LOAD_STATUS loadStatus;
         TargetInfo(ActorRef port) {
             this.port = port;
             adaptOver = false;
+            loadStatus = LOAD_STATUS.NORMORLLOAD;
         }
     }
     private Probes probes;
     private Map<ActorRef, TargetInfo> targetsInfo;
-    private Queue<ActorRef> timeoutTargets = new LinkedList<ActorRef>();
 
     static private final int TICK = 0;
     static private final int DONE = 1;
@@ -162,16 +219,25 @@ class LatencyMonitor extends UntypedActor {
         return msg instanceof Probe;
     }
 
+    static void setProbeRate(Object msg, int rate) {
+        assert (msg instanceof Probe);
+        ((Probe) msg).rate = rate;
+    }
+
     LatencyMonitor(List<Pair<ActorRef, ActorRef>> targetPorts, Bolt bolt) {
         this.operator = getContext().parent();
         this.logger = new Logger(Logger.Role.LATENCY_MONITOR);
 
         probePeriod = bolt.getMaxLatency();
-        reactionFactor = bolt.getReactionFactor();
+        overloadReactionFactor = bolt.getOverloadReactionFactor();
+        overloadReactionTime = bolt.getOverloadReactionTime();
+        underloadReactionFactor = bolt.getUnderloadReactionFactor();
+        underloadReactionTime = bolt.getUnderloadReactionTime();
+        lowWaterMark = bolt.getLowWaterMark();
+
         startAdaptiveTime = bolt.getStartAdaptiveTime();
         splitAdaptiveTime = bolt.getSplitAdaptiveTime();
 
-        // List<ActorRef> targets = new LinkedList<ActorRef>();
         targetsInfo = new HashMap<ActorRef, TargetInfo>();
         for (Pair<ActorRef, ActorRef> targetPort : targetPorts) {
             ActorRef target = targetPort.first();
@@ -184,7 +250,6 @@ class LatencyMonitor extends UntypedActor {
                     getContext().dispatcher(), getSelf());
         }
 
-        //probes = new Probes(targets);
         probes = new Probes();
 
         timer = getContext().system().scheduler().schedule(Duration.Zero(),
@@ -194,40 +259,27 @@ class LatencyMonitor extends UntypedActor {
         logger.info("Latency Monitor Started");
     }
 
-    private Procedure<Object> SPLITTING = new Procedure<Object>() {
+    private Procedure<Object> REPORTING = new Procedure<Object>() {
         @Override
         public void apply(Object msg) {
-            if (msg.equals(DONE)) { // Start monitoring
-                if (!timeoutTargets.isEmpty()) {
-                    ActorRef timeoutTarget = timeoutTargets.poll();
-                    logger.info("Too Many Messages Timeout");
-                    operator.tell(new BoltOperator.Split(timeoutTarget), getSelf());
-                    logger.info("Ask Operator to Do Split");
-                    targetsInfo.get(timeoutTarget).adaptOver = false;
-                    getContext().system().scheduler().scheduleOnce(Duration.create(splitAdaptiveTime, TimeUnit.SECONDS),
-                            getSelf(), new AdaptOver(timeoutTarget),
-                            getContext().dispatcher(), getSelf());
-                } else {
-                    getContext().unbecome();
-                    logger.info("Latency Monitor Start Monitoring");
-                    // Start timer again
-                    // TODO Just test here
-                    timer = getContext().system().scheduler().schedule(Duration.Zero(),
-                            Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), TICK,
-                            getContext().dispatcher(), getSelf());
-                }
-            } else unhandled(msg); // Ignore all probes
+            if (msg.equals(DONE)) {
+                logger.info("Latency Monitor Start Monitoring");
+                getContext().unbecome();
+                // Start timer again
+                timer = getContext().system().scheduler().schedule(Duration.Zero(),
+                        Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), TICK,
+                        getContext().dispatcher(), getSelf());
+            } else handleControlMessage(msg); // Ignore all probes and still handle regular messages
         }
     };
 
     @Override
     public void onReceive(Object msg) throws Exception {
         if (msg.equals(TICK)) {
-            if (probes.timeout()) {
+            if (probes.updateStatus()) {
                 timer.cancel(); // Stop timer
-                getContext().become(SPLITTING);
-                getSelf().tell(DONE, getSelf()); // Start splitting
-                logger.info("Latency Monitor Start Splitting");
+                report();
+                getContext().become(REPORTING);
                 return;
             }
             // Send probes to all targets
@@ -242,7 +294,33 @@ class LatencyMonitor extends UntypedActor {
             long now = System.nanoTime();
             // TODO Temporary log here, remove or format this later
             // logger.info("SubOperator: " + ((Probe) msg).target + " Current latency: " + (now - ((Probe) msg).now) / 1000 + "us");
-        } else if (msg instanceof Target) {
+            // logger.info("Current rate: " + ((Probe) msg).rate);
+        } else handleControlMessage(msg); // Handle regular messages
+    }
+
+    private void report() {
+        Map<ActorRef, LOAD_STATUS> targetsLoadStatus = new HashMap<ActorRef, LOAD_STATUS>();
+        for (Map.Entry<ActorRef, TargetInfo> targetInfoEntry : targetsInfo.entrySet()) {
+            ActorRef target = targetInfoEntry.getKey();
+            LOAD_STATUS loadStatus = targetInfoEntry.getValue().loadStatus;
+            targetsLoadStatus.put(target, loadStatus);
+            if (loadStatus == LOAD_STATUS.UNDERLOAD || loadStatus == LOAD_STATUS.OVERLOAD) {
+                probes.removeTarget(target);
+                targetsInfo.get(target).adaptOver = false; // Avoid sending probes
+                // Remove target, because:
+                // 1. Invalid history record, because the targets will be split or merged.
+                // 2. Avoid statistic during adapting.
+                getContext().system().scheduler().scheduleOnce(Duration.create(splitAdaptiveTime, TimeUnit.SECONDS),
+                        getSelf(), new AdaptOver(target),
+                        getContext().dispatcher(), getSelf());
+            }
+        }
+        logger.info("Report load status to operator.");
+        operator.tell(new LoadStatus(targetsLoadStatus), getSelf());
+    }
+
+    private void handleControlMessage(Object msg) {
+        if (msg instanceof Target) {
             Target target = (Target)msg;
             if (target.toAdd) {
                 logger.debug("Add target " + target.target);

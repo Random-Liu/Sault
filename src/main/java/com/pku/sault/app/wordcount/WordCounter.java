@@ -30,17 +30,34 @@ class Emitter extends Spout {
 					, new Tuple(System.currentTimeMillis(), 1)));
 		}
 		long newNow = System.currentTimeMillis();
+		long timeout;
 		if (newNow - now < 10000)
-			return 50000L;
+			timeout = 50000L;
 		//	return 1000000L; //2s
+		else if (newNow - now < 15000)
+			timeout = 20000L;
 		else if (newNow - now < 20000)
-			return 20000L;
+			timeout = 10000L;
+		else if (newNow - now < 25000)
+			timeout = 5000L;
 		else if (newNow - now < 30000)
-			return 10000L;
+			timeout = 1000L;
+		else if (newNow - now < 35000)
+			timeout = 10000L;
 		else if (newNow - now < 40000)
-			return 5000L;
+			timeout = 50000L;
+		else if (newNow - now < 45000)
+			timeout = 100000L;
+		else if (newNow - now < 50000)
+			timeout = 500000L;
+		else if (newNow - now < 55000)
+			timeout = 500000L;
 		else
-			return 1000L;
+			timeout = 1000000L;
+		if (Math.random() <= 0.0001 * timeout / 10000)
+			System.out.println("Current send timeout: " + timeout);
+		return timeout;
+
 		//else	return 1000;
 		//else
 			//return 1000;
@@ -68,9 +85,10 @@ class Counter extends Bolt {
 	private static final long serialVersionUID = 1L;
 
 	Counter (int parallelism) {
-		setReactionFactor(20);
 		setInitialParallelism(parallelism);
-		setMaxLatency(300);
+		setMinParallelism(1);
+		setMaxParallelism(8); // TODO Remove this
+		setMaxLatency(100);
 	}
 
 	private Collector collector;
@@ -127,7 +145,7 @@ public class WordCounter {
 	public static void main(String[] args) {
 		Config config = new Config();
 		App app = new App(config);
-		System.out.println(app.addNode("Counter", new Counter(2)));
+		System.out.println(app.addNode("Counter", new Counter(1)));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		// app.deactivate();
@@ -141,9 +159,10 @@ public class WordCounter {
 			e.printStackTrace();
 		}*/
 		// app.activate();
+
 		/*
         try {
-            Thread.sleep(8000);
+            Thread.sleep(15000);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -151,9 +170,19 @@ public class WordCounter {
 		System.out.println("Do merging!!!!!!!!!!!!!!!!!!!!!!!");
 		System.out.println(app.mergeNode("Emitter"));
 		System.out.println(app.mergeNode("Counter"));
+		System.out.println(app.mergeNode("Counter"));
+		System.out.println(app.mergeNode("Counter"));
+		System.out.println(app.mergeNode("Counter"));
+		System.out.println(app.mergeNode("Counter"));
 
         System.out.println("Do splitting!!!!!!!!!!!!!!!!!!!!!!!");
         System.out.println(app.splitNode("Emitter"));
-        System.out.println(app.splitNode("Counter"));*/
+        System.out.println(app.splitNode("Counter"));
+		System.out.println(app.splitNode("Counter"));
+		System.out.println(app.splitNode("Counter"));
+		System.out.println(app.splitNode("Counter"));
+		System.out.println(app.splitNode("Counter"));
+		System.out.println(app.splitNode("Counter"));
+		*/
 	}
 }
