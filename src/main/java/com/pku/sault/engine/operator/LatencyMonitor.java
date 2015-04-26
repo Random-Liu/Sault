@@ -99,11 +99,18 @@ class LatencyMonitor extends UntypedActor {
         }
 
         void addTarget(ActorRef target) {
+            if (probesStatus.containsKey(target)) return;
             probesStatus.put(target, new ProbeStatus()); // The target will be monitored from next iteration
         }
 
         void removeTarget(ActorRef target) {
             probesStatus.remove(target);
+        }
+
+        void clearTarget(ActorRef target) {
+            ProbeStatus newProbeStatus = new ProbeStatus();
+            newProbeStatus.currentMaxRate = probesStatus.get(target).currentMaxRate;
+            probesStatus.put(target, newProbeStatus);
         }
 
         void fill(Probe probe) {
@@ -125,6 +132,8 @@ class LatencyMonitor extends UntypedActor {
             for (Map.Entry<ActorRef, ProbeStatus> probeStatusEntry : probesStatus.entrySet()) {
                 ActorRef target = probeStatusEntry.getKey();
                 ProbeStatus probeStatus = probeStatusEntry.getValue();
+                if (!targetsInfo.get(target).adaptOver)
+                    continue; // If the target is adapting, don't probe
                 // Update timeout status
                 if (probeStatus.timeoutHistory.size() >= overloadReactionTime) {
                     boolean isOldestTimeout = probeStatus.timeoutHistory.poll();
@@ -164,6 +173,7 @@ class LatencyMonitor extends UntypedActor {
         }
 
         Probe newProbe(ActorRef target) {
+            assert !targetsInfo.get(target).adaptOver;
             ProbeStatus probeStatus = probesStatus.get(target);
             // When create new probe, assume it will timeout, when it is filled we'll set it false
             probeStatus.isProbeTimeout = true;
@@ -187,10 +197,11 @@ class LatencyMonitor extends UntypedActor {
 
     static private final int TICK = 0;
     static private final int DONE = 1;
+    static private final int ADAPT = 2;
 
     private Cancellable timer;
     private final long startAdaptiveTime;
-    private final long splitAdaptiveTime;
+    private final long updateAdaptiveTime;
 
     private Logger logger;
 
@@ -236,7 +247,7 @@ class LatencyMonitor extends UntypedActor {
         lowWaterMark = bolt.getLowWaterMark();
 
         startAdaptiveTime = bolt.getStartAdaptiveTime();
-        splitAdaptiveTime = bolt.getSplitAdaptiveTime();
+        updateAdaptiveTime = bolt.getUpdateAdaptiveTime();
 
         targetsInfo = new HashMap<ActorRef, TargetInfo>();
         for (Pair<ActorRef, ActorRef> targetPort : targetPorts) {
@@ -263,12 +274,17 @@ class LatencyMonitor extends UntypedActor {
         @Override
         public void apply(Object msg) {
             if (msg.equals(DONE)) {
-                logger.info("Latency Monitor Start Monitoring");
-                getContext().unbecome();
+                logger.info("Report done, adapt for " + updateAdaptiveTime + " s");
+                getContext().system().scheduler().scheduleOnce(Duration.create(updateAdaptiveTime, TimeUnit.SECONDS),
+                        getSelf(), ADAPT,
+                        getContext().dispatcher(), getSelf());
+            } else if (msg.equals(ADAPT)) {
+                logger.info("Adapt over. Latency Monitor Start Monitoring");
                 // Start timer again
                 timer = getContext().system().scheduler().schedule(Duration.Zero(),
                         Duration.create(probePeriod, TimeUnit.MILLISECONDS), getSelf(), TICK,
                         getContext().dispatcher(), getSelf());
+                getContext().unbecome();
             } else handleControlMessage(msg); // Ignore all probes and still handle regular messages
         }
     };
@@ -304,16 +320,8 @@ class LatencyMonitor extends UntypedActor {
             ActorRef target = targetInfoEntry.getKey();
             LOAD_STATUS loadStatus = targetInfoEntry.getValue().loadStatus;
             targetsLoadStatus.put(target, loadStatus);
-            if (loadStatus == LOAD_STATUS.UNDERLOAD || loadStatus == LOAD_STATUS.OVERLOAD) {
-                probes.removeTarget(target);
-                targetsInfo.get(target).adaptOver = false; // Avoid sending probes
-                // Remove target, because:
-                // 1. Invalid history record, because the targets will be split or merged.
-                // 2. Avoid statistic during adapting.
-                getContext().system().scheduler().scheduleOnce(Duration.create(splitAdaptiveTime, TimeUnit.SECONDS),
-                        getSelf(), new AdaptOver(target),
-                        getContext().dispatcher(), getSelf());
-            }
+            if (loadStatus == LOAD_STATUS.UNDERLOAD || loadStatus == LOAD_STATUS.OVERLOAD)
+                probes.clearTarget(target); // If overload, invalid all history record
         }
         logger.info("Report load status to operator.");
         operator.tell(new LoadStatus(targetsLoadStatus), getSelf());
@@ -337,6 +345,8 @@ class LatencyMonitor extends UntypedActor {
             AdaptOver adaptOver = (AdaptOver)msg;
             logger.debug("Adapt over " + adaptOver.target);
             if (targetsInfo.containsKey(adaptOver.target)) { // It may be removed before
+                // For split or merge adaptive, because target is already in probes,
+                // it will not be inserted again.
                 probes.addTarget(adaptOver.target);
                 targetsInfo.get(adaptOver.target).adaptOver = true;
             }

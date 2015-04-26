@@ -145,7 +145,7 @@ public class WordCounter {
 	public static void main(String[] args) {
 		Config config = new Config();
 		App app = new App(config);
-		System.out.println(app.addNode("Counter", new Counter(1)));
+		System.out.println(app.addNode("Counter", new Counter(2)));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		System.out.println(app.addNode("Emitter", new Emitter()));
 		// app.deactivate();

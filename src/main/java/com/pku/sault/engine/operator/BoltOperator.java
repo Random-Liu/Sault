@@ -1,6 +1,5 @@
 package com.pku.sault.engine.operator;
 
-import java.io.Serializable;
 import java.util.*;
 import java.util.Map.Entry;
 
@@ -18,7 +17,6 @@ import akka.japi.Creator;
 import akka.remote.RemoteScope;
 import com.pku.sault.engine.util.Constants;
 import com.pku.sault.engine.util.Logger;
-import org.apache.hadoop.yarn.webapp.hamlet.HamletSpec;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 
@@ -146,7 +144,7 @@ public class BoltOperator extends UntypedActor {
         // This is the only way I can come up with now.
         this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
         this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
-                .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
+               .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
 
 		// Register on Targets and Request Routers from Targets
 		if (targets != null) { // If targets == null, it means that there are no initial targets.

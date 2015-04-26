@@ -36,7 +36,7 @@ public abstract class Bolt implements Cloneable, Serializable {
 
 	// Time to adaptive new target
 	private int startAdaptiveTime = 5; // 5s
-	private int splitAdaptiveTime = 2; // 2s
+	private int updateAdaptiveTime = 2; // 2s
 
     // [Caution] prepare and cleanup will also be called during migration
 	public abstract void prepare(Collector collector);
@@ -131,12 +131,12 @@ public abstract class Bolt implements Cloneable, Serializable {
 		this.startAdaptiveTime = startAdaptiveTime;
 	}
 
-	public int getSplitAdaptiveTime() {
-		return splitAdaptiveTime;
+	public int getUpdateAdaptiveTime() {
+		return updateAdaptiveTime;
 	}
 
-	protected void setSplitAdaptiveTime(int splitAdaptiveTime) {
-		this.splitAdaptiveTime = splitAdaptiveTime;
+	protected void setUpdateAdaptiveTime(int updateAdaptiveTime) {
+		this.updateAdaptiveTime = updateAdaptiveTime;
 	}
 
 	public int getExpiredTimeout() {

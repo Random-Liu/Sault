@@ -69,8 +69,8 @@ class SparkResourceFactory implements ResourceFactory {
         this.resourceOfNode = saultConfig.getResourceOfNode();
         this.nodeNumber = saultConfig.getNodeNumber();
 
-        SparkConf conf = new SparkConf().setAppName(saultConfig.getApplicationName())//;
-                .setMaster(saultConfig.getSparkMaster());
+        SparkConf conf = new SparkConf().setAppName(saultConfig.getApplicationName());
+                //.setMaster(saultConfig.getSparkMaster());
         context = new JavaSparkContext(conf);
 
         List<Integer> dummy = new LinkedList<Integer>();
