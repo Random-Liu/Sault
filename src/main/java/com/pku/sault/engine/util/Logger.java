@@ -32,7 +32,7 @@ public class Logger {
 
     public Logger(Role role) {
         this.role = role;
-        this.enabled = true;
+        this.enabled = false; // true;
     }
 
     private void log(Level level, Role role, String msg) {

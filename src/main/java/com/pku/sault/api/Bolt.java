@@ -28,7 +28,7 @@ public abstract class Bolt implements Cloneable, Serializable {
 	private double overloadReactionFactor = 0.8; // Overload when 80% of overloadReactionTime is timeout by default
 	private int overloadReactionTime = 20; // Reaction in 20 probe period by default, 20 * 300 = 6000ms = 6s
 	private double underloadReactionFactor = 0.8; // Underload when 80% of underloadReactionTime is underload by default
-	private int underloadReactionTime = 100; // Reaction in 100 probe period by default, 100 & 300 = 30000ms = 30s
+	private int underloadReactionTime = 100; // Reaction in 100 probe period by default, 100 * 300 = 30000ms = 30s
 	private double lowWaterMark = 0.1; // Underload when rate is under 10% of max rate by default
 
 	// Timeout configuration

@@ -142,9 +142,9 @@ public class BoltOperator extends UntypedActor {
             targetPorts.add(new Pair<ActorRef, ActorRef>(subOperatorInfoEntry.getKey(), subOperatorInfoEntry.getValue().port));
 
         // This is the only way I can come up with now.
-        this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
-        this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
-               .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
+        // this.latencyMonitorActorSystem = this.resourceManager.allocateLocalResource("LatencyMonitor-"+id);
+        // this.latencyMonitor = getContext().actorOf(LatencyMonitor.props(targetPorts, bolt)
+        //       .withDeploy(new Deploy(new RemoteScope(latencyMonitorActorSystem))));
 
 		// Register on Targets and Request Routers from Targets
 		if (targets != null) { // If targets == null, it means that there are no initial targets.
@@ -322,6 +322,7 @@ public class BoltOperator extends UntypedActor {
     }
 
     private void updateUpstreamRouter() {
+        System.out.println("Parallelism " + System.currentTimeMillis() / 1000 + " " + subOperatorsInfo.size());
         for (ActorRef source : sources.values())
             source.tell(new Operator.Router(id, router), getSelf()); // Update router of all sources
     }

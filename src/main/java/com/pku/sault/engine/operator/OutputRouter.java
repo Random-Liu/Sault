@@ -15,6 +15,14 @@ class OutputRouter extends UntypedActor {
 	Map<String, RouteTree> routerTable;
 	Map<String, HashMap<ActorRef, ActorRef>> bufferActors;
 
+    // Just for experiment
+    private boolean testing = true;
+    private int receivedMessageNumber = 0;
+    private Cancellable reportTimer;
+    private final long reportInterval = 2;
+    private final int REPORT = 0;
+    private int round = 0;
+
 	public static Props props(final Map<String, RouteTree> routerTable) {
 		return Props.create(new Creator<OutputRouter>() {
 			private static final long serialVersionUID = 1L;
@@ -29,12 +37,20 @@ class OutputRouter extends UntypedActor {
 		this.bufferActors = new HashMap<String, HashMap<ActorRef, ActorRef>>();
 		for (String routerId : routerTable.keySet())
 			bufferActors.put(routerId, new HashMap<ActorRef, ActorRef>());
+
+        if (testing) {
+            // Just for test
+            reportTimer = getContext().system().scheduler().schedule(Duration.Zero(),
+                    Duration.create(reportInterval, TimeUnit.SECONDS), getSelf(), REPORT,
+                    getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
+        }
 	}
 	
 	@Override
 	public void onReceive(Object msg) throws Exception {
 		// Update routerTable later
 		if (msg instanceof TupleWrapper) {
+            ++receivedMessageNumber;
 			TupleWrapper tupleWrapper = (TupleWrapper)msg;
 			for (Map.Entry<String, RouteTree> routerEntry : routerTable.entrySet()) {
 				String routerId = routerEntry.getKey();
@@ -68,6 +84,11 @@ class OutputRouter extends UntypedActor {
 			}
 		} else if (LatencyMonitor.isProbe(msg)) {
             getSender().forward(msg, getContext()); // Forward this back to the latency monitor
+        } else if (msg.equals(REPORT)) {
+            System.out.println("InputRate " + System.currentTimeMillis() / 1000 + " " + receivedMessageNumber / 2
+                + " " + round);
+            ++round;
+            receivedMessageNumber = 0;
         } else unhandled(msg); // TODO Update Router
 	}
 

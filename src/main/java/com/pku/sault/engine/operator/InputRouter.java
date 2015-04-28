@@ -83,7 +83,7 @@ class InputRouter extends UntypedActor {
     private Cancellable timer;
 
     // Just for test
-    private boolean testing = true;
+    private boolean testing = false;
     private Cancellable reportTimer;
     private final long reportInterval = 2;
     private final int REPORT = 1;
@@ -101,7 +101,6 @@ class InputRouter extends UntypedActor {
 
 	InputRouter(Bolt bolt, ActorRef outputRouter) {
         this.logger = new Logger(Logger.Role.INPUT_ROUTER);
-        logger.disable();
         this.bolt = bolt;
         this.EXPIRED_TIMEOUT = bolt.getExpiredTimeout();
         this.outputRouter = outputRouter;
@@ -114,10 +113,9 @@ class InputRouter extends UntypedActor {
 
         if (testing) {
             // Just for test
-            this.reportTimer =
-                    timer = getContext().system().scheduler().schedule(Duration.Zero(),
-                            Duration.create(reportInterval, TimeUnit.SECONDS), getSelf(), REPORT,
-                            getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
+            this.reportTimer = getContext().system().scheduler().schedule(Duration.Zero(),
+                    Duration.create(reportInterval, TimeUnit.SECONDS), getSelf(), REPORT,
+                    getContext().system().dispatchers().lookup(Constants.TIMER_DISPATCHER), getSelf());
         }
 	}
 

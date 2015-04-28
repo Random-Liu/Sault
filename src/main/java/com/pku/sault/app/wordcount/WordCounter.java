@@ -4,14 +4,62 @@ import com.pku.sault.api.*;
 
 class Emitter extends Spout {
 	private Collector collector;
-	//int x = 0;
 	private long now;
+    private long timeoutTable[] = new long[46];
+    private final long interval = 10000; // 10s
+    private long lastTimeout = 0L;
 
 	Emitter () {
-		// TODO setInstanceNumber(16) => dead lock, why?
 		setInstanceNumber(4);
 		setParallelism(16);
-	}
+
+        timeoutTable[0] = 100000L;
+        timeoutTable[1] = 50000L;
+        timeoutTable[2] = 20000L;
+        timeoutTable[3] = 10000L;
+        timeoutTable[4] = 5000L;
+        timeoutTable[5] = 1000L;
+        timeoutTable[6] = 1000L;
+        timeoutTable[7] = 1000L;
+        timeoutTable[8] = 1000L;
+        timeoutTable[9] = 10000L;
+        timeoutTable[10] = 10000L;
+        timeoutTable[11] = 20000L;
+        timeoutTable[12] = 20000L;
+        timeoutTable[13] = 50000L;
+        timeoutTable[14] = 50000L;
+        timeoutTable[15] = 100000L;
+        timeoutTable[16] = 100000L;
+        timeoutTable[17] = 500000L;
+        timeoutTable[18] = 500000L;
+        timeoutTable[19] = 1000000L;
+        timeoutTable[20] = 1000000L;
+        timeoutTable[21] = 1000000L;
+        timeoutTable[22] = 1000000L;
+        timeoutTable[23] = 100000L;
+        timeoutTable[24] = 50000L;
+        timeoutTable[25] = 20000L;
+        timeoutTable[26] = 10000L;
+        timeoutTable[27] = 5000L;
+        timeoutTable[28] = 1000L;
+        timeoutTable[29] = 1000L;
+        timeoutTable[30] = 1000L;
+        timeoutTable[31] = 1000L;
+        timeoutTable[32] = 10000L;
+        timeoutTable[33] = 10000L;
+        timeoutTable[34] = 20000L;
+        timeoutTable[35] = 20000L;
+        timeoutTable[36] = 50000L;
+        timeoutTable[37] = 50000L;
+        timeoutTable[38] = 100000L;
+        timeoutTable[39] = 100000L;
+        timeoutTable[40] = 500000L;
+        timeoutTable[41] = 500000L;
+        timeoutTable[42] = 1000000L;
+        timeoutTable[43] = 1000000L;
+        timeoutTable[44] = 1000000L;
+        timeoutTable[45] = 1000000L;
+    }
 
 	@Override
 	public void open(Collector collector) {
@@ -21,50 +69,23 @@ class Emitter extends Spout {
 
 	@Override
 	public long nextTuple() {
-		//System.out.println("Emitting");
-		for (int i = 0; i < 128; ++i) {
-			collector.emit(new Tuple(""
-					+ (char) (Math.random() * 26 + 'a')
-					+ (char) (Math.random() * 26 + 'a')
-					+ (char) (Math.random() * 3 + 'a') // 26 * 26 *3 = 2028 words
-					, new Tuple(System.currentTimeMillis(), 1)));
-		}
-		long newNow = System.currentTimeMillis();
-		long timeout;
-		if (newNow - now < 10000)
-			timeout = 50000L;
-		//	return 1000000L; //2s
-		else if (newNow - now < 15000)
-			timeout = 20000L;
-		else if (newNow - now < 20000)
-			timeout = 10000L;
-		else if (newNow - now < 25000)
-			timeout = 5000L;
-		else if (newNow - now < 30000)
-			timeout = 1000L;
-		else if (newNow - now < 35000)
-			timeout = 10000L;
-		else if (newNow - now < 40000)
-			timeout = 50000L;
-		else if (newNow - now < 45000)
-			timeout = 100000L;
-		else if (newNow - now < 50000)
-			timeout = 500000L;
-		else if (newNow - now < 55000)
-			timeout = 500000L;
-		else
-			timeout = 1000000L;
-		if (Math.random() <= 0.0001 * timeout / 10000)
-			System.out.println("Current send timeout: " + timeout);
-		return timeout;
-
-		//else	return 1000;
-		//else
-			//return 1000;
-		//++x;
-		//return 60000000;
-		//return 20000; // Every 1s send test once, just for test
-	}
+        for (int i = 0; i < 128; ++i) {
+            collector.emit(new Tuple(""
+                    + (char) (Math.random() * 26 + 'a')
+                    + (char) (Math.random() * 26 + 'a')
+                    + (char) (Math.random() * 3 + 'a') // 26 * 26 *3 = 2028 words
+                    , new Tuple(System.currentTimeMillis(), 1)));
+        }
+        long newNow = System.currentTimeMillis();
+        int timeoutIndex = (int)((newNow - now) / interval);
+        if (timeoutIndex >= timeoutTable.length)
+            timeoutIndex = timeoutTable.length - 1;
+        long timeout = timeoutTable[timeoutIndex];
+        if (lastTimeout != timeout)
+            System.out.println("Timeout " + System.currentTimeMillis() / 1000 + " " + timeout);
+        lastTimeout = timeout;
+        return timeout;
+    }
 
 	@Override
 	public void close() {
@@ -87,22 +108,18 @@ class Counter extends Bolt {
 	Counter (int parallelism) {
 		setInitialParallelism(parallelism);
 		setMinParallelism(1);
-		setMaxParallelism(8); // TODO Remove this
-		setMaxLatency(100);
+		setMaxLatency(300);
 	}
 
 	private Collector collector;
 	private String word;
 	private int wordCount;
-	private final int MAX_WORD_COUNT = 1000;
 	private long averageTime = 0L;
 	private long now;
 	private long sample_interval = 2000;
 
 	@Override
 	public void prepare(Collector collector) {
-		// Current now don't need config.
-		// System.out.println("Have no idea");
 		this.collector = collector;
 		this.wordCount = 0;
 		this.now = System.currentTimeMillis();
@@ -112,19 +129,15 @@ class Counter extends Bolt {
 	public void execute(Tuple tuple) {
 		if (word == null)
 			word = (String)tuple.getKey();
-		// System.out.println(word + " " + wordCount);
 		averageTime += System.currentTimeMillis() - (Long)((Tuple) tuple.getValue()).getKey();
 		wordCount += (Integer) ((Tuple) tuple.getValue()).getValue();
-		//if (wordCount >= MAX_WORD_COUNT) {
 		long newNow = System.currentTimeMillis();
 		if (newNow - now >= sample_interval) {
 			now = newNow;
-			if (Math.random() <= 0.001 * getInitialParallelism()) {
-				System.out.println(word + " " + (double) averageTime / wordCount + "");
-			}
+			if (Math.random() <= 0.005 * getInitialParallelism())
+                System.out.println("Latency " + System.currentTimeMillis() / 1000 + " " + (double) averageTime / wordCount);
 			averageTime = 0L;
 			this.collector.emit(new Tuple(word, wordCount));
-			// System.out.println(word + " " + wordCount);
 			wordCount = 0;
 		}
 	}
@@ -145,44 +158,8 @@ public class WordCounter {
 	public static void main(String[] args) {
 		Config config = new Config();
 		App app = new App(config);
-		System.out.println(app.addNode("Counter", new Counter(2)));
-		System.out.println(app.addNode("Emitter", new Emitter()));
-		System.out.println(app.addNode("Emitter", new Emitter()));
-		// app.deactivate();
-		System.out.println(app.addEdge("Emitter", "Counter"));
-		System.out.println(app.addEdge("Emit", "Counter"));
-		System.out.println(app.addEdge("Emitter", "Count"));
-		System.out.println(app.addEdge("Emitter", "Counter"));
-		/*try {
-			Thread.sleep(5000);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}*/
-		// app.activate();
-
-		/*
-        try {
-            Thread.sleep(15000);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-		System.out.println("Do merging!!!!!!!!!!!!!!!!!!!!!!!");
-		System.out.println(app.mergeNode("Emitter"));
-		System.out.println(app.mergeNode("Counter"));
-		System.out.println(app.mergeNode("Counter"));
-		System.out.println(app.mergeNode("Counter"));
-		System.out.println(app.mergeNode("Counter"));
-		System.out.println(app.mergeNode("Counter"));
-
-        System.out.println("Do splitting!!!!!!!!!!!!!!!!!!!!!!!");
-        System.out.println(app.splitNode("Emitter"));
-        System.out.println(app.splitNode("Counter"));
-		System.out.println(app.splitNode("Counter"));
-		System.out.println(app.splitNode("Counter"));
-		System.out.println(app.splitNode("Counter"));
-		System.out.println(app.splitNode("Counter"));
-		System.out.println(app.splitNode("Counter"));
-		*/
+        app.addNode("Counter", new Counter(10));
+        app.addNode("Emitter", new Emitter());
+        app.addEdge("Emitter", "Counter");
 	}
 }
